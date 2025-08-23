@@ -1,0 +1,5 @@
+# ZED2 requirements for Jetson Nano (ARM64) deployment
+# Note: Prefer system packages when available
+cython>=3.0.0
+numpy>=1.13,<2.0
+Pillow>=8.0.0

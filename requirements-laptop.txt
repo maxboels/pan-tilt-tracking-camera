@@ -1,0 +1,6 @@
+# ZED2 requirements for laptop (x86_64) development
+numpy==1.26.4
+opencv-python==4.8.1.78  
+cython>=3.0.0
+Pillow>=8.0.0
+matplotlib>=3.5.0
