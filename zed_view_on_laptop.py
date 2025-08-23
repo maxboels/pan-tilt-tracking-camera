@@ -6,7 +6,15 @@ import time
 
 def colourise_depth(depth_m: np.ndarray, dmin=0.3, dmax=5.0) -> np.ndarray:
     """Map 32F depth (m) to a colour image. Invalids -> black."""
-    d = depth_m.copy()
+    # Debug: Check what we received
+    print(f"Depth type: {type(depth_m)}")
+    print(f"Depth dtype: {depth_m.dtype if hasattr(depth_m, 'dtype') else 'No dtype'}")
+    print(f"Depth shape: {depth_m.shape if hasattr(depth_m, 'shape') else 'No shape'}")
+    
+    # Ensure it's a proper numpy array
+    d = np.asarray(depth_m, dtype=np.float32)
+    print(f"After conversion - dtype: {d.dtype}, shape: {d.shape}")
+    
     invalid = ~np.isfinite(d) | (d <= 0)
     d[invalid] = dmax
     d = np.clip(d, dmin, dmax)
@@ -46,7 +54,20 @@ def main():
                 frame_bgra = left.get_data()
                 frame_bgr = frame_bgra[..., :3].copy()
                 depth_m = depth.get_data()
-                depth_vis = colourise_depth(depth_m, dmin=0.3, dmax=5.0)
+                
+                # Debug: Only run this once
+                if frames == 0:
+                    depth_vis = colourise_depth(depth_m, dmin=0.3, dmax=5.0)
+                else:
+                    # Use the working version after debug
+                    d = np.asarray(depth_m, dtype=np.float32)
+                    invalid = ~np.isfinite(d) | (d <= 0)
+                    d[invalid] = 5.0
+                    d = np.clip(d, 0.3, 5.0)
+                    d_norm = ((d - 0.3) / (5.0 - 0.3) * 255.0).astype(np.uint8)
+                    cmap = getattr(cv2, "COLORMAP_TURBO", cv2.COLORMAP_JET)
+                    depth_vis = cv2.applyColorMap(255 - d_norm, cmap)
+                    depth_vis[invalid] = (0, 0, 0)
 
                 # Make same height and stack
                 h = min(frame_bgr.shape[0], depth_vis.shape[0])
