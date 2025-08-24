@@ -1,3 +1,8 @@
-source .zed2_complete_env/bin/activate
+#!/bin/bash
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
 
-__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia python3 complete_tracking_with_servos.py
+# Use the POSIX-compliant '.' command instead of 'source'
+. .zed2_complete_env/bin/activate
+
+python3 complete_tracking_with_servos.py
