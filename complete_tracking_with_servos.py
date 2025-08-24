@@ -16,6 +16,8 @@ import serial
 import threading
 import queue
 import torch
+from simple_performance_logger import SimplePerformanceLogger, Timer
+import psutil
 
 # Add this check right after your imports
 print("--- Hardware Check ---")
@@ -35,6 +37,187 @@ class Detection:
     center_2d: Tuple[int, int]
     distance: Optional[float] = None
 
+class AsyncServoController:
+    """Asynchronous servo controller with dedicated thread"""
+    def __init__(self, port: str = None, baudrate: int = 115200):
+        self.port = port
+        self.baudrate = baudrate
+        self.serial_conn = None
+        self.connected = False
+        
+        # Threading
+        self.command_queue = queue.Queue(maxsize=2)  # Small queue to prevent lag
+        self.servo_thread = None
+        self.running = False
+        
+        # Current positions
+        self.current_pan = 0.0
+        self.current_tilt = 0.0
+        self._position_lock = threading.Lock()
+        
+        # Movement limits
+        self.max_change_per_frame = 2.0  # degrees
+        
+        if port is None:
+            port = self.find_arduino_port()
+            
+        if port:
+            self.port = port
+            self.connect()
+        else:
+            print("No Arduino found on available ports")
+
+    def find_arduino_port(self):
+        """Auto-detect Arduino port"""
+        import serial.tools.list_ports
+        
+        arduino_patterns = ['arduino', 'usb', 'acm', 'ch340', 'cp210', 'ftdi']
+        
+        ports = serial.tools.list_ports.comports()
+        for port in ports:
+            description = port.description.lower()
+            if any(pattern in description for pattern in arduino_patterns):
+                print(f"Found potential Arduino: {port.device} - {port.description}")
+                return port.device
+        
+        common_ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyUSB0', '/dev/ttyUSB1']
+        for port in common_ports:
+            try:
+                test_serial = serial.Serial(port, 115200, timeout=1)
+                test_serial.close()
+                print(f"Found working port: {port}")
+                return port
+            except:
+                continue
+        
+        return None
+
+    def connect(self):
+        """Connect to Arduino servo bridge and start servo thread"""
+        try:
+            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
+            time.sleep(2)  # Arduino reset time
+            
+            # Test with center command
+            self.serial_conn.write(b'CENTER\n')
+            self.serial_conn.flush()
+            time.sleep(0.5)
+            
+            response = ""
+            if self.serial_conn.in_waiting > 0:
+                response = self.serial_conn.read(self.serial_conn.in_waiting).decode()
+            
+            if "Ready" in response:
+                self.connected = True
+                self.running = True
+                self.servo_thread = threading.Thread(target=self._servo_loop, daemon=True)
+                self.servo_thread.start()
+                print(f"Async servo controller connected on {self.port}")
+            else:
+                print(f"Servo response did not contain 'Ready': '{response.strip()}'")
+                
+        except Exception as e:
+            print(f"Servo connection failed: {e}")
+            self.connected = False
+
+    def _servo_loop(self):
+        """Dedicated thread for servo commands"""
+        while self.running:
+            try:
+                command = self.command_queue.get(timeout=0.1)
+                if command is None:  # Shutdown signal
+                    break
+                
+                if self.serial_conn and self.connected:
+                    try:
+                        self.serial_conn.write((command + '\n').encode())
+                        self.serial_conn.flush()
+                    except Exception as e:
+                        print(f"Servo command failed: {e}")
+                        
+            except queue.Empty:
+                continue
+
+    def _send_command_async(self, command: str) -> bool:
+        """Send command asynchronously"""
+        if not self.connected or not self.running:
+            return False
+        
+        try:
+            # Non-blocking put - drop command if queue is full
+            self.command_queue.put_nowait(command)
+            return True
+        except queue.Full:
+            # Queue is full, skip this command to prevent lag
+            return True
+
+    def move_to_non_blocking(self, pan_angle: float, tilt_angle: float) -> bool:
+        """Non-blocking servo movement - skip if queue is busy"""
+        # Clamp angles
+        pan_angle = np.clip(pan_angle, -90, 90)
+        tilt_angle = np.clip(tilt_angle, -30, 30)
+        
+        # Limit movement speed
+        with self._position_lock:
+            pan_diff = pan_angle - self.current_pan
+            tilt_diff = tilt_angle - self.current_tilt
+            
+            if abs(pan_diff) > self.max_change_per_frame:
+                pan_angle = self.current_pan + self.max_change_per_frame * np.sign(pan_diff)
+            if abs(tilt_diff) > self.max_change_per_frame:
+                tilt_angle = self.current_tilt + self.max_change_per_frame * np.sign(tilt_diff)
+        
+        # Only send commands if movement is significant
+        success = True
+        
+        if abs(pan_angle - self.current_pan) > 0.5:
+            success &= self._send_command_async(f"SERVO,0,{pan_angle:.1f}")
+            with self._position_lock:
+                self.current_pan = pan_angle
+        
+        if abs(tilt_angle - self.current_tilt) > 0.5:
+            success &= self._send_command_async(f"SERVO,1,{tilt_angle:.1f}")
+            with self._position_lock:
+                self.current_tilt = tilt_angle
+        
+        return success
+
+    def center(self) -> bool:
+        """Center both servos"""
+        success = self._send_command_async("CENTER")
+        if success:
+            with self._position_lock:
+                self.current_pan = 0.0
+                self.current_tilt = 0.0
+        return success
+
+    def get_position(self) -> Tuple[float, float]:
+        """Get current servo positions"""
+        with self._position_lock:
+            return self.current_pan, self.current_tilt
+
+    def close(self):
+        """Close connection and stop thread"""
+        if self.running:
+            self.running = False
+            # Send shutdown signal
+            try:
+                self.command_queue.put_nowait(None)
+            except queue.Full:
+                pass
+        
+        if self.connected and self.serial_conn:
+            self._send_command_async("CENTER")
+            time.sleep(0.5)
+            self._send_command_async("OFF")
+            time.sleep(0.5)
+            self.serial_conn.close()
+            self.connected = False
+        
+        if self.servo_thread and self.servo_thread.is_alive():
+            self.servo_thread.join(timeout=1.0)
+
+# Keep the original ServoController for backward compatibility
 class ServoController:
     """Simple servo controller for Arduino bridge"""
     def __init__(self, port: str = None, baudrate: int = 115200):
@@ -42,7 +225,11 @@ class ServoController:
         self.baudrate = baudrate
         self.serial_conn = None
         self.connected = False
-        
+
+        # Rate limiting
+        self.last_command_time = 0
+        self.min_command_interval = 0.015  # 15ms minimum between commands
+
         # Current positions
         self.current_pan = 0.0
         self.current_tilt = 0.0
@@ -117,24 +304,29 @@ class ServoController:
         """Send command to servo controller"""
         if not self.connected or not self.serial_conn:
             return False
-        
+
+        # Rate limiting
+        now = time.time()
+        if now - self.last_command_time < self.min_command_interval:
+            return True  # Skip command if too frequent
+
         try:
             self.serial_conn.write((command + '\n').encode())
             self.serial_conn.flush()
-            time.sleep(0.05)  # Short delay for command processing
-            return True
+            # time.sleep(0.05)  # Short delay for command processing
+            # return True
         except Exception as e:
             print(f"Servo command failed: {e}")
             return False
 
     def move_to(self, pan_angle: float, tilt_angle: float, smooth: bool = True) -> bool:
-        """Move servos to specified angles with optional smoothing"""
-        # Clamp angles to safe ranges
+        """Move servos - OPTIMIZED to reduce command frequency"""
+        # Clamp angles
         pan_angle = np.clip(pan_angle, -90, 90)
         tilt_angle = np.clip(tilt_angle, -30, 30)
         
         if smooth:
-            # Limit movement speed for smooth tracking
+            # Limit movement speed
             pan_diff = pan_angle - self.current_pan
             tilt_diff = tilt_angle - self.current_tilt
             
@@ -143,13 +335,15 @@ class ServoController:
             if abs(tilt_diff) > self.max_change_per_frame:
                 tilt_angle = self.current_tilt + self.max_change_per_frame * np.sign(tilt_diff)
         
-        # Send commands
+        # IMPORTANT: Only send commands if movement is significant
         success = True
-        if abs(pan_angle - self.current_pan) > 0.5:  # Only move if significant change
+        
+        # Increase threshold from 0.5 to 2.0 degrees to reduce command frequency
+        if abs(pan_angle - self.current_pan) > 0.5:  # Was 0.5, now 2.0
             success &= self.send_command(f"SERVO,0,{pan_angle:.1f}")
             self.current_pan = pan_angle
         
-        if abs(tilt_angle - self.current_tilt) > 0.5:
+        if abs(tilt_angle - self.current_tilt) > 0.5:  # Was 0.5, now 2.0
             success &= self.send_command(f"SERVO,1,{tilt_angle:.1f}")
             self.current_tilt = tilt_angle
         
@@ -177,13 +371,15 @@ class ServoController:
             self.connected = False
 
 class CompleteTrackingSystem:
-    def __init__(self, config_path: str = "config.json", enable_servos: bool = True):
+    def __init__(self, config_path: str = "config.json", enable_servos: bool = True, use_async_servos: bool = True, inverted_pan_servo: bool = True):
         """Initialize complete tracking system"""
         print("Initializing complete ZED2 tracking system...")
         
         # Load config
         self.config = self.load_config(config_path)
         self.enable_servos = enable_servos
+        self.use_async_servos = use_async_servos
+        self.inverted_pan_servo = inverted_pan_servo
         
         # Initialize ZED camera
         print("Setting up ZED camera...")
@@ -215,9 +411,14 @@ class CompleteTrackingSystem:
         if self.enable_servos:
             try:
                 print("Initializing servo controller...")
-                self.servo_controller = ServoController()
+                if self.use_async_servos:
+                    self.servo_controller = AsyncServoController()
+                else:
+                    self.servo_controller = ServoController()
+                    
                 if self.servo_controller.connected:
-                    print("Servo control enabled")
+                    servo_type = "Async" if self.use_async_servos else "Sync"
+                    print(f"{servo_type} servo control enabled")
                 else:
                     print("Servo control disabled - connection failed")
                     self.servo_controller = None
@@ -233,6 +434,9 @@ class CompleteTrackingSystem:
         # Camera FOV
         self.horizontal_fov = 110.0
         self.vertical_fov = 70.0
+        
+        # ADD THIS ONE LINE:
+        self.perf_logger = SimplePerformanceLogger()
         
         print("Complete tracking system ready!")
         if self.servo_controller:
@@ -320,7 +524,9 @@ class CompleteTrackingSystem:
         """Convert pixel coordinates to servo angles"""
         norm_x = (x - img_width / 2) / (img_width / 2)
         norm_y = (y - img_height / 2) / (img_height / 2)
-        
+
+        if self.inverted_pan_servo:
+            norm_x = -norm_x
         pan_angle = norm_x * (self.horizontal_fov / 2)
         tilt_angle = -norm_y * (self.vertical_fov / 2)
         
@@ -367,8 +573,8 @@ class CompleteTrackingSystem:
 
     # fast tracking
     def run_tracking(self, duration: Optional[float] = None):
-        """Main tracking loop with performance optimizations."""
-        print("Starting complete tracking system...")
+        """Main tracking loop with performance optimizations and logging."""
+        print("Starting tracking with performance logging...")
         print("Controls:")
         print("  'q' - Quit, 'c' - Center servos, 'r' - Reset tracking, 't' - Toggle servo tracking")
         
@@ -377,22 +583,23 @@ class CompleteTrackingSystem:
         
         start_time = time.time()
         frame_count = 0
-        fps_counter = 0
-        fps_start = time.time()
-        current_fps = 0
         servo_tracking_enabled = True
+        yolo_processing_size = (320, 180)  # Even smaller for speed
         
-        # --- OPTIMIZATION: Define a smaller size for YOLO processing ---
-        yolo_processing_size = (640, 360) 
-
         try:
             while True:
+                frame_start = time.perf_counter()
+                timings = {}
+                
                 if duration and (time.time() - start_time) > duration:
                     break
                 
-                if self.zed.grab(self.runtime_params) != sl.ERROR_CODE.SUCCESS:
-                    time.sleep(0.001)
-                    continue
+                # ZED grab with timing
+                with Timer() as t:
+                    if self.zed.grab(self.runtime_params) != sl.ERROR_CODE.SUCCESS:
+                        time.sleep(0.001)
+                        continue
+                timings['zed_grab'] = t.ms()
                 
                 self.zed.retrieve_image(self.left_image, sl.VIEW.LEFT)
                 self.zed.retrieve_measure(self.depth_map, sl.MEASURE.DEPTH)
@@ -400,87 +607,98 @@ class CompleteTrackingSystem:
                 image_bgr = self.left_image.get_data()[..., :3]
                 img_height, img_width = image_bgr.shape[:2]
                 
-                # --- OPTIMIZATION: Resize image for YOLO ---
-                # 1. Create a small image for fast processing
-                input_small = cv2.resize(image_bgr, yolo_processing_size)
+                # YOLO with timing
+                with Timer() as t:
+                    input_small = cv2.resize(image_bgr, yolo_processing_size)
+                    detections = self.detect_objects(input_small)
+                    
+                    # Scale detection coordinates back to the original image size
+                    scale_x = img_width / yolo_processing_size[0]
+                    scale_y = img_height / yolo_processing_size[1]
+                    
+                    for det in detections:
+                        x1, y1, x2, y2 = det.bbox
+                        det.bbox = (int(x1 * scale_x), int(y1 * scale_y), int(x2 * scale_x), int(y2 * scale_y))
+                        cx, cy = det.center_2d
+                        det.center_2d = (int(cx * scale_x), int(cy * scale_y))
+                        det.distance = self.get_depth_at_point(det.center_2d[0], det.center_2d[1])
+                timings['yolo'] = t.ms()
                 
-                # 2. Run detection on the small image
-                detections = self.detect_objects(input_small)
+                timings['depth'] = 0  # Already measured with YOLO
                 
-                # 3. Scale detection coordinates back to the original image size
-                scale_x = img_width / yolo_processing_size[0]
-                scale_y = img_height / yolo_processing_size[1]
-                
-                for det in detections:
-                    x1, y1, x2, y2 = det.bbox
-                    det.bbox = (int(x1 * scale_x), int(y1 * scale_y), int(x2 * scale_x), int(y2 * scale_y))
-                    cx, cy = det.center_2d
-                    det.center_2d = (int(cx * scale_x), int(cy * scale_y))
-                    # The depth is now looked up on the original full-res depth map
-                    det.distance = self.get_depth_at_point(det.center_2d[0], det.center_2d[1])
-                
-                # --- End of Optimization ---
-
-                # Tracking logic remains the same
+                # Tracking logic
                 current_time = time.time()
                 
                 if detections:
                     self.tracking_target = self.select_tracking_target(detections)
                     self.last_detection_time = current_time
                     
-                    if (self.tracking_target and self.servo_controller and 
-                        self.servo_controller.connected and servo_tracking_enabled):
-                        
-                        center_x, center_y = self.tracking_target.center_2d
-                        pan_angle, tilt_angle = self.pixel_to_angles(center_x, center_y, img_width, img_height)
-                        
-                        self.servo_controller.move_to(pan_angle, tilt_angle, smooth=True)
+                    # Servo control with timing
+                    with Timer() as t:
+                        if (self.tracking_target and self.servo_controller and 
+                            self.servo_controller.connected and servo_tracking_enabled):
+                            
+                            center_x, center_y = self.tracking_target.center_2d
+                            pan_angle, tilt_angle = self.pixel_to_angles(center_x, center_y, img_width, img_height)
+                            
+                            # Use non-blocking movement for better performance
+                            if hasattr(self.servo_controller, 'move_to_non_blocking'):
+                                self.servo_controller.move_to_non_blocking(pan_angle, tilt_angle)
+                            else:
+                                self.servo_controller.move_to(pan_angle, tilt_angle, smooth=True)
+                    timings['servo'] = t.ms()
                 else:
+                    timings['servo'] = 0
                     if time.time() - self.last_detection_time > self.tracking_timeout:
                         if self.tracking_target:
                             print("Lost target")
                             self.tracking_target = None
                 
-                # Visualization
-                vis = self.draw_detections(image_bgr, detections)
+                # Visualization with timing
+                with Timer() as t:
+                    vis = self.draw_detections(image_bgr, detections)
+                    
+                    status_lines = [
+                        f"Frame: {frame_count}",
+                        f"Detections: {len(detections)}",
+                        f"Tracking: {'Yes' if self.tracking_target else 'No'}"
+                    ]
+                    
+                    if self.servo_controller and self.servo_controller.connected:
+                        pan, tilt = self.servo_controller.get_position()
+                        status_lines.append(f"Servos: Pan {pan:.1f}°, Tilt {tilt:.1f}°")
+                        status_lines.append(f"Servo Tracking: {'ON' if servo_tracking_enabled else 'OFF'}")
+                    else:
+                        status_lines.append("Servos: DISCONNECTED")
+                    
+                    if self.tracking_target:
+                        status_lines.append(f"Target: {self.tracking_target.class_name}")
+                        if self.tracking_target.distance:
+                            status_lines.append(f"Distance: {self.tracking_target.distance:.2f}m")
+                    
+                    # ADD: Show frame timing
+                    frame_ms = (time.perf_counter() - frame_start) * 1000
+                    status_lines.append(f"Frame: {frame_ms:.1f}ms")
+                    
+                    for i, line in enumerate(status_lines):
+                        cv2.putText(vis, line, (10, 30 + i*25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 3)
+                        cv2.putText(vis, line, (10, 30 + i*25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    
+                    h, w = vis.shape[:2]
+                    center_x, center_y = w // 2, h // 2
+                    cv2.drawMarker(vis, (center_x, center_y), (0, 255, 255), cv2.MARKER_CROSS, 20, 2)
+                    
+                    if self.tracking_target:
+                        target_x, target_y = self.tracking_target.center_2d
+                        cv2.arrowedLine(vis, (center_x, center_y), (target_x, target_y), (0, 255, 255), 3)
+                    
+                    cv2.imshow("Complete ZED2 Tracking", vis)
+                timings['viz'] = t.ms()
                 
-                # FPS and Status display... (rest of the function is the same)
-                fps_counter += 1
-                if time.time() - fps_start >= 1.0:
-                    current_fps = fps_counter / (time.time() - fps_start)
-                    fps_counter = 0
-                    fps_start = time.time()
-                
-                status_lines = [
-                    f"FPS: {current_fps:.1f}",
-                    f"Detections: {len(detections)}",
-                    f"Tracking: {'Yes' if self.tracking_target else 'No'}"
-                ]
-                if self.servo_controller and self.servo_controller.connected:
-                    pan, tilt = self.servo_controller.get_position()
-                    status_lines.append(f"Servos: Pan {pan:.1f}°, Tilt {tilt:.1f}°")
-                    status_lines.append(f"Servo Tracking: {'ON' if servo_tracking_enabled else 'OFF'}")
-                else:
-                    status_lines.append("Servos: DISCONNECTED")
-                
-                if self.tracking_target:
-                    status_lines.append(f"Target: {self.tracking_target.class_name}")
-                    if self.tracking_target.distance:
-                        status_lines.append(f"Distance: {self.tracking_target.distance:.2f}m")
-                
-                for i, line in enumerate(status_lines):
-                    cv2.putText(vis, line, (10, 30 + i*25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 3)
-                    cv2.putText(vis, line, (10, 30 + i*25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                
-                h, w = vis.shape[:2]
-                center_x, center_y = w // 2, h // 2
-                cv2.drawMarker(vis, (center_x, center_y), (0, 255, 255), cv2.MARKER_CROSS, 20, 2)
-                
-                if self.tracking_target:
-                    target_x, target_y = self.tracking_target.center_2d
-                    cv2.arrowedLine(vis, (center_x, center_y), (target_x, target_y), (0, 255, 255), 3)
-                
-                cv2.imshow("Complete ZED2 Tracking", vis)
+                # Log this frame's performance
+                timings['total'] = (time.perf_counter() - frame_start) * 1000
+                target_found = self.tracking_target is not None
+                self.perf_logger.log_frame(frame_count, timings, detections, target_found)
                 
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q') or key == 27: break
@@ -503,6 +721,8 @@ class CompleteTrackingSystem:
             elapsed = time.time() - start_time
             print(f"Session complete: {frame_count} frames in {elapsed:.1f}s")
             if elapsed > 0: print(f"Average FPS: {frame_count/elapsed:.1f}")
+            print(f"\nPerformance data saved to: {self.perf_logger.csv_file}")
+            print("Open CSV in Excel or use pandas to analyze bottlenecks")
 
     def run_tracking_slow(self, duration: Optional[float] = None):
         """Main tracking loop"""
@@ -655,11 +875,16 @@ def main():
     parser.add_argument("--config", default="config.json", help="Config file")
     parser.add_argument("--duration", type=float, help="Run duration in seconds")
     parser.add_argument("--no-servos", action="store_true", help="Disable servo control")
+    parser.add_argument("--sync-servos", action="store_true", help="Use synchronous servo control")
     
     args = parser.parse_args()
     
     try:
-        tracker = CompleteTrackingSystem(args.config, enable_servos=not args.no_servos)
+        tracker = CompleteTrackingSystem(
+            args.config, 
+            enable_servos=not args.no_servos,
+            use_async_servos=not args.sync_servos
+        )
         tracker.run_tracking(args.duration)
     except Exception as e:
         print(f"Error: {e}")

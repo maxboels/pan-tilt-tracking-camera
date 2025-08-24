@@ -1,0 +1,3 @@
+source .zed2_complete_env/bin/activate
+
+__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia python3 complete_tracking_with_servos.py

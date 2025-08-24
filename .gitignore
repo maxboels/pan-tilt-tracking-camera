@@ -1,3 +1,4 @@
 .zed2_system_env/
 .zed2_complete_env/
 *=*
+tracking_performance_*.csv
