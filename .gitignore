@@ -1,4 +1,8 @@
 .zed2_system_env/
+# Virtual environments
 .zed2_complete_env/
+.pan_tilt_env/
+venv/
+env/
 *=*
 tracking_performance_*.csv
