@@ -227,7 +227,9 @@ class PanTiltYOLOTracker:
                 pan_error, tilt_error = self.calculate_pan_tilt_error(smoothed_pos)
                 if abs(pan_error) > self.dead_zone or abs(tilt_error) > self.dead_zone:
                     self.target_position = smoothed_pos
-                # else keep previous target position for stability
+                else:
+                    # Person is in dead zone - stop tracking to avoid jitter
+                    self.target_position = None
         else:
             self.target_position = None
         

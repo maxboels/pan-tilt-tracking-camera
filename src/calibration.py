@@ -8,8 +8,14 @@ import cv2
 import numpy as np
 import json
 import time
-from servo_controller import ArduinoServoController
-from usb_camera import USBCamera
+
+# Handle imports for both module usage and standalone execution
+try:
+    from .servo_controller import ArduinoServoController
+    from .usb_camera import USBCamera
+except ImportError:
+    from servo_controller import ArduinoServoController
+    from usb_camera import USBCamera
 
 class CameraServoCalibrator:
     def __init__(self, config_file="calibration.json"):
@@ -138,7 +144,7 @@ class CameraServoCalibrator:
             tilt_error = pixel_y - self.frame_center[1]
             
             # Convert to angles (adjust these scaling factors)
-            pan_angle = pan_error * 0.1  # degrees per pixel
+            pan_angle = -pan_error * 0.1  # NEGATIVE to fix direction: right pixel -> negative angle (turn right)
             tilt_angle = -tilt_error * 0.08  # negative for camera Y inversion
             
             return pan_angle, tilt_angle
