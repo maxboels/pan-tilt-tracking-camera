@@ -1,0 +1,16 @@
+# Pan-Tilt Tracking Camera Requirements
+# Core dependencies for YOLO-based person tracking
+
+# Computer vision and tracking
+opencv-python>=4.5.0
+ultralytics>=8.0.0
+
+# Hardware communication
+pyserial>=3.5
+adafruit-circuitpython-pca9685
+
+# Scientific computing
+numpy>=1.21.0
+
+# Utilities
+mediapipe  # Keeping for potential fallback option
