@@ -12,6 +12,7 @@ from src.usb_camera import USBCamera
 from src.servo_controller import ArduinoServoController
 from src.calibration import CameraServoCalibrator
 from src.yolo_tracker import YOLOTracker
+from src.tracking_logger import TrackingLogger
 import numpy as np
 import cv2
 import time
@@ -30,7 +31,7 @@ def load_config(config_path="config/config.json"):
             "fps": 30
         },
         "servo": {
-            "port": "/dev/ttyUSB0",
+            "port": "/dev/ttyACM0",
             "baudrate": 115200,
             "inverted_pan": True # Our pan servo is inverted (default True)
         },
@@ -84,7 +85,7 @@ class PanTiltYOLOTracker:
         # Servo controller setup
         servo_config = config.get('servo', {})
         self.servo_controller = ArduinoServoController(
-            port=servo_config.get('port', '/dev/ttyUSB0'),
+            port=servo_config.get('port', '/dev/ttyACM0'),
             baudrate=servo_config.get('baudrate', 115200),
             inverted_pan=servo_config.get('inverted_pan', True)
         )
@@ -117,6 +118,10 @@ class PanTiltYOLOTracker:
         # Performance tracking
         self.fps_counter = deque(maxlen=30)
         self.frame_count = 0
+        
+        # Initialize tracking logger
+        experiment_name = config.get('experiment_name', None)
+        self.tracking_logger = TrackingLogger(log_dir="logs", experiment_name=experiment_name)
         
         print("Pan-Tilt YOLO Tracker initialized")
     
@@ -167,10 +172,36 @@ class PanTiltYOLOTracker:
         while self.running:
             if self.target_position and self.tracking_enabled:
                 try:
+                    # DEBUG: Log target position (bounding box)
+                    print(f"DEBUG: Target position (bbox center): ({self.target_position[0]}, {self.target_position[1]})")
+                    print(f"DEBUG: Frame center: ({self.frame_center[0]}, {self.frame_center[1]})")
+                    
+                    # Calculate pixel error from center
+                    pixel_error_x = self.target_position[0] - self.frame_center[0]
+                    pixel_error_y = self.target_position[1] - self.frame_center[1]
+                    print(f"DEBUG: Pixel error: X={pixel_error_x}, Y={pixel_error_y}")
+                    
+                    # Log quadrant information
+                    quadrant = ""
+                    if pixel_error_x > 0 and pixel_error_y < 0:
+                        quadrant = "TOP-RIGHT"
+                        expected_movement = "Camera should turn RIGHT and UP"
+                    elif pixel_error_x < 0 and pixel_error_y < 0:
+                        quadrant = "TOP-LEFT"
+                        expected_movement = "Camera should turn LEFT and UP"
+                    elif pixel_error_x > 0 and pixel_error_y > 0:
+                        quadrant = "BOTTOM-RIGHT"
+                        expected_movement = "Camera should turn RIGHT and DOWN"
+                    elif pixel_error_x < 0 and pixel_error_y > 0:
+                        quadrant = "BOTTOM-LEFT"
+                        expected_movement = "Camera should turn LEFT and DOWN"
+                    print(f"DEBUG: Target is in {quadrant} quadrant - {expected_movement}")
+                    
                     # Convert pixel coordinates to servo angles
                     target_pan, target_tilt = self.calibrator.pixel_to_servo(
                         self.target_position[0], self.target_position[1]
                     )
+                    print(f"DEBUG: Calculated servo angles: Pan={target_pan:.1f}, Tilt={target_tilt:.1f}")
                     
                     # Apply servo limits
                     target_pan = np.clip(target_pan, -90, 90)
@@ -179,11 +210,13 @@ class PanTiltYOLOTracker:
                     # Get current servo positions
                     current_pan = self.servo_controller.current_pan
                     current_tilt = self.servo_controller.current_tilt
+                    print(f"DEBUG: Current servo positions: Pan={current_pan:.1f}, Tilt={current_tilt:.1f}")
                     
                     # Calculate smooth movement
                     max_step = 2.0  # degrees per control cycle
                     pan_diff = target_pan - current_pan
                     tilt_diff = target_tilt - current_tilt
+                    print(f"DEBUG: Servo movement: Pan diff={pan_diff:.1f}, Tilt diff={tilt_diff:.1f}")
                     
                     # Limit movement speed
                     if abs(pan_diff) > max_step:
@@ -193,10 +226,26 @@ class PanTiltYOLOTracker:
                     
                     new_pan = current_pan + pan_diff
                     new_tilt = current_tilt + tilt_diff
+                    print(f"DEBUG: New servo positions: Pan={new_pan:.1f}, Tilt={new_tilt:.1f}")
+                    
+                    # Expected camera movement direction
+                    pan_direction = "RIGHT" if new_pan > current_pan else "LEFT"
+                    tilt_direction = "UP" if new_tilt > current_tilt else "DOWN"
+                    print(f"DEBUG: Expected camera movement: Pan={pan_direction}, Tilt={tilt_direction}")
                     
                     # Move servos if movement is significant
                     if abs(pan_diff) > 0.5 or abs(tilt_diff) > 0.5:
                         self.servo_controller.move_servos(new_pan, new_tilt)
+                        
+                        # Log servo command with detailed information
+                        self.tracking_logger.log_servo_command(
+                            pan_angle=new_pan,
+                            tilt_angle=new_tilt,
+                            current_pan=current_pan,
+                            current_tilt=current_tilt,
+                            target_position=self.target_position,
+                            frame_center=self.frame_center
+                        )
                 
                 except Exception as e:
                     print(f"Control loop error: {e}")
@@ -242,6 +291,59 @@ class PanTiltYOLOTracker:
         # Calculate FPS
         frame_time = time.time() - start_time
         self.fps_counter.append(frame_time)
+        processing_time_ms = frame_time * 1000  # Convert to milliseconds
+        
+        # Log frame data for performance evaluation
+        if current_target:
+            # Convert current_target to dict for logging
+            target_dict = {
+                'class_name': current_target.class_name,
+                'confidence': current_target.confidence,
+                'bbox': current_target.bbox,
+                'center': current_target.center,
+                'smoothed_center': smoothed_pos if smoothed_pos else current_target.center,
+                'tracking_enabled': self.tracking_enabled
+            }
+            
+            # Get servo data
+            servo_data = {
+                'current_pan': self.servo_controller.current_pan,
+                'current_tilt': self.servo_controller.current_tilt,
+                'target_pan': 0.0,
+                'target_tilt': 0.0,
+                'command_pan': 0.0,
+                'command_tilt': 0.0
+            }
+            
+            # If we have a valid target position, calculate target pan/tilt angles
+            if self.target_position:
+                try:
+                    target_pan, target_tilt = self.calibrator.pixel_to_servo(
+                        self.target_position[0], self.target_position[1]
+                    )
+                    servo_data['target_pan'] = target_pan
+                    servo_data['target_tilt'] = target_tilt
+                except:
+                    pass
+            
+            # Log the detection
+            self.tracking_logger.log_detection(
+                target_dict,
+                self.frame_center,
+                servo_data,
+                processing_time_ms
+            )
+        else:
+            # Log frame with no detection
+            frame_data = {
+                'camera_center_x': self.frame_center[0],
+                'camera_center_y': self.frame_center[1],
+                'target_detected': False,
+                'current_pan': self.servo_controller.current_pan,
+                'current_tilt': self.servo_controller.current_tilt,
+                'tracking_enabled': self.tracking_enabled
+            }
+            self.tracking_logger.log_frame(frame_data, processing_time_ms)
         
         return vis_frame
     
@@ -343,9 +445,42 @@ class PanTiltYOLOTracker:
                     self.servo_controller.center_servos()
                     print("Servos centered")
                 elif key == ord('s'):
-                    filename = f"frame_{int(time.time())}.jpg"
-                    cv2.imwrite(filename, frame)
-                    print(f"Frame saved as {filename}")
+                    # Save the frame in the current experiment directory
+                    logs_dir = self.tracking_logger.log_dir
+                    
+                    # Create frames subdirectory in the experiment folder
+                    frames_dir = os.path.join(logs_dir, "frames")
+                    os.makedirs(frames_dir, exist_ok=True)
+                    
+                    # Create filename with timestamp
+                    timestamp = int(time.time())
+                    filename = f"frame_{timestamp}.jpg"
+                    filepath = os.path.join(frames_dir, filename)
+                    
+                    # Add additional debug info to the frame before saving
+                    debug_frame = vis_frame.copy()
+                    
+                    # Add timestamp and current servo positions to the image
+                    timestamp_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+                    cv2.putText(debug_frame, f"Time: {timestamp_str}", (10, debug_frame.shape[0] - 70), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    
+                    # Add servo positions if available
+                    if hasattr(self.servo_controller, 'current_pan') and hasattr(self.servo_controller, 'current_tilt'):
+                        pan_position = self.servo_controller.current_pan
+                        tilt_position = self.servo_controller.current_tilt
+                        cv2.putText(debug_frame, f"Pan: {pan_position:.1f}°, Tilt: {tilt_position:.1f}°", 
+                                  (10, debug_frame.shape[0] - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    
+                    # Add coordinates of target if available
+                    if self.target_position:
+                        x, y = self.target_position
+                        cv2.putText(debug_frame, f"Target: ({x}, {y})", 
+                                  (10, debug_frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    
+                    # Save the enhanced visualization frame
+                    cv2.imwrite(filepath, debug_frame)
+                    print(f"Frame saved with tracking data as {filepath}")
                 
                 self.frame_count += 1
         
@@ -362,6 +497,8 @@ def main():
                        help='Configuration file path')
     parser.add_argument('--camera', type=int, help='Camera index override')
     parser.add_argument('--model', type=str, help='YOLO model path override')
+    parser.add_argument('--experiment', '-e', type=str, 
+                       help='Name for this experiment run (for logging)')
     
     args = parser.parse_args()
     
@@ -373,6 +510,8 @@ def main():
         config['camera']['index'] = args.camera
     if args.model:
         config['tracking']['model_path'] = args.model
+    if args.experiment:
+        config['experiment_name'] = args.experiment
     
     # Create and run tracker
     tracker = PanTiltYOLOTracker(config=config)

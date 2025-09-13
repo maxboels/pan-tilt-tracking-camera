@@ -129,15 +129,29 @@ class ArduinoServoController:
         """Move servo to specific angle"""
         # Apply calibration adjustments
         if channel == self.pan_channel:
+            print(f"SERVO: Direction multiplier for pan is {self.pan_direction} (inverted_pan={self.pan_direction==-1})")
             # Apply direction and offset corrections
             calibrated_angle = (angle * self.pan_direction) + self.pan_offset
             calibrated_angle = max(self.pan_min, min(self.pan_max, calibrated_angle))
             print(f"Pan servo: requested={angle:.1f}°, calibrated={calibrated_angle:.1f}°")
+            # Log the expected physical movement direction
+            if angle > 0:
+                expected_movement = "RIGHT" if self.pan_direction > 0 else "LEFT"
+            else:
+                expected_movement = "LEFT" if self.pan_direction > 0 else "RIGHT"
+            print(f"SERVO: Expected pan movement direction: {expected_movement}")
         elif channel == self.tilt_channel:
+            print(f"SERVO: Direction multiplier for tilt is {self.tilt_direction}")
             # Apply direction and offset corrections
             calibrated_angle = (angle * self.tilt_direction) + self.tilt_offset
             calibrated_angle = max(self.tilt_min, min(self.tilt_max, calibrated_angle))
             print(f"Tilt servo: requested={angle:.1f}°, calibrated={calibrated_angle:.1f}°")
+            # Log the expected physical movement direction
+            if angle > 0:
+                expected_movement = "UP" if self.tilt_direction > 0 else "DOWN"
+            else:
+                expected_movement = "DOWN" if self.tilt_direction > 0 else "UP"
+            print(f"SERVO: Expected tilt movement direction: {expected_movement}")
         else:
             calibrated_angle = angle
         

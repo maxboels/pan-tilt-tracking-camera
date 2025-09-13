@@ -1,0 +1,17 @@
+{
+  "total_frames": 359,
+  "frames_with_tracking": 359,
+  "tracking_rate": 1.0,
+  "average_error_pixels": 26.795932819299722,
+  "max_error_pixels": 28.653097563788805,
+  "min_error_pixels": 0.0,
+  "experiment_name": "servo_test_1757783415_20250913_181015",
+  "movement_pattern": "circular",
+  "pattern_params": {
+    "center_x": 960,
+    "center_y": 540,
+    "radius": 400,
+    "speed": 1,
+    "clockwise": true
+  }
+}

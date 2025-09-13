@@ -134,26 +134,56 @@ class CameraServoCalibrator:
     
     def pixel_to_servo(self, pixel_x, pixel_y):
         """Convert pixel coordinates to servo angles"""
-        if self.transformation_matrix is None:
-            # Fallback to simple linear mapping if no calibration
-            if self.frame_center is None:
-                return 0, 0
-            
-            # Simple proportional control
-            pan_error = pixel_x - self.frame_center[0]
-            tilt_error = pixel_y - self.frame_center[1]
-            
-            # Convert to angles (adjust these scaling factors)
-            pan_angle = pan_error * 0.1  # FIXED: Removed negative sign
-            tilt_angle = -tilt_error * 0.08  # negative for camera Y inversion
-            
-            return pan_angle, tilt_angle
+        # EMERGENCY OVERRIDE - Direct fix ignoring all other calibration
         
-        # Use calibrated transformation
-        pixel_point = np.array([[[pixel_x, pixel_y]]], dtype=np.float32)
-        servo_point = cv2.perspectiveTransform(pixel_point, self.transformation_matrix)
+        # User-adjustable settings for different servo configurations
+        USE_EMERGENCY_FIX = True  # Set to False to use original calibration
+        INVERT_PAN_DIRECTION = False  # IMPORTANT: Set to FALSE since servo_controller already inverts
+        INVERT_TILT_DIRECTION = False  # Set to True if tilt servo is inverted
         
-        return servo_point[0][0][0], servo_point[0][0][1]
+        if not USE_EMERGENCY_FIX and self.transformation_matrix is not None:
+            # Use original calibration transformation
+            pixel_point = np.array([[[pixel_x, pixel_y]]], dtype=np.float32)
+            servo_point = cv2.perspectiveTransform(pixel_point, self.transformation_matrix)
+            return servo_point[0][0][0], servo_point[0][0][1]
+        
+        # Direct mapping with configurable inversions
+        if self.frame_center is None:
+            self.frame_center = (320, 240)  # Default for 640x480 camera
+            
+        # Calculate error from center
+        pan_error = pixel_x - self.frame_center[0]  # Positive if target is to the RIGHT
+        tilt_error = pixel_y - self.frame_center[1]  # Positive if target is at BOTTOM
+        
+        # Target quadrant detection for logging
+        quadrant = ""
+        if pan_error > 0 and tilt_error < 0: quadrant = "TOP-RIGHT"
+        elif pan_error < 0 and tilt_error < 0: quadrant = "TOP-LEFT"
+        elif pan_error > 0 and tilt_error > 0: quadrant = "BOTTOM-RIGHT"
+        elif pan_error < 0 and tilt_error > 0: quadrant = "BOTTOM-LEFT"
+        
+        # DIRECT MAPPING based on direction settings
+        # Simplified conversion with configurable inversions
+        pan_scale = 0.1   # How much to turn for each pixel of error (adjust as needed)
+        tilt_scale = 0.08  # How much to turn for each pixel of error (adjust as needed)
+        
+        # Apply user direction settings
+        pan_multiplier = -1 if INVERT_PAN_DIRECTION else 1
+        tilt_multiplier = -1 if INVERT_TILT_DIRECTION else 1
+        
+        # Calculate servo angles with direction control
+        # For RIGHT side (positive error), pan right (positive angle if not inverted)
+        # For BOTTOM (positive error), tilt down (negative angle if not inverted)
+        pan_angle = pan_error * pan_scale * pan_multiplier
+        tilt_angle = -tilt_error * tilt_scale * tilt_multiplier
+        
+        print(f"EMERGENCY FIX ACTIVE: Object in {quadrant}, pixel error: ({pan_error}, {tilt_error})")
+        print(f"EMERGENCY FIX: Calculated angles: Pan={pan_angle:.1f}°, Tilt={tilt_angle:.1f}°")
+        print(f"EMERGENCY FIX: Expected camera movement: " + 
+              f"Pan={'RIGHT' if (pan_error > 0) == (pan_multiplier > 0) else 'LEFT'}, " +
+              f"Tilt={'DOWN' if (tilt_error > 0) == (tilt_multiplier > 0) else 'UP'}")
+        
+        return pan_angle, tilt_angle
     
     def servo_to_pixel(self, pan_angle, tilt_angle):
         """Convert servo angles to expected pixel coordinates"""
