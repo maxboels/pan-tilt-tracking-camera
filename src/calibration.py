@@ -144,7 +144,7 @@ class CameraServoCalibrator:
             tilt_error = pixel_y - self.frame_center[1]
             
             # Convert to angles (adjust these scaling factors)
-            pan_angle = -pan_error * 0.1  # NEGATIVE to fix direction: right pixel -> negative angle (turn right)
+            pan_angle = pan_error * 0.1  # FIXED: Removed negative sign
             tilt_angle = -tilt_error * 0.08  # negative for camera Y inversion
             
             return pan_angle, tilt_angle

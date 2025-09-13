@@ -32,7 +32,7 @@ def load_config(config_path="config/config.json"):
         "servo": {
             "port": "/dev/ttyUSB0",
             "baudrate": 115200,
-            "inverted_pan": True
+            "inverted_pan": True # Our pan servo is inverted (default True)
         },
         "tracking": {
             "model_path": "yolov8n.pt",

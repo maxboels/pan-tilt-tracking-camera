@@ -1,25 +1,36 @@
 {
   "camera": {
     "index": 0,
-    "resolution": [1920, 1080],
+    "resolution": [
+      640,
+      480
+    ],
     "fps": 30
   },
   "servo": {
-    "port": "/dev/ttyUSB0",
+    "port": "/dev/ttyACM0",
     "baudrate": 115200,
     "pan_channel": 0,
     "tilt_channel": 1,
-    "inverted_pan": false
+    "inverted_pan": true
   },
   "detection": {
     "model_complexity": 1,
     "min_detection_confidence": 0.5,
     "min_tracking_confidence": 0.5
   },
+  "tracking": {
+    "model_path": "yolov8n.pt",
+    "confidence_threshold": 0.5,
+    "dead_zone": 50
+  },
   "pantilt": {
     "dead_zone": 50
   },
   "display": {
-    "window_size": [1280, 720]
+    "window_size": [
+      1280,
+      720
+    ]
   }
 }
