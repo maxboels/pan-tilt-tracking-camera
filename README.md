@@ -33,9 +33,19 @@ A clean, organized computer vision system for tracking people using a USB camera
 ## Hardware Requirements
 
 - **Camera**: USB 2.0 UVC camera (tested with U20CAM-1080P-1)
-- **Servos**: Pan-tilt servo mechanism with Arduino controller (running `arduino_servo_bridge.ino`)
-- **Arduino**: Any Arduino compatible with the Servo library (tested with Arduino Nano/Uno)
-- **Computer**: Linux system (tested on Ubuntu and NVIDIA Jetson)
+  - High-Speed USB 2.0 UVC camera module with driver-free support
+  - 1920x1080@30fps output (YUY2/MJPEG) 
+  - 130° Wide-Angle Optics with 103°(H)/130°(D) FOV
+  - M12 lens thread for optical customization
+  - 32x32mm PCB with 4x M2 mounting holes
+  - Operating temperature: -20°C~70°C
+- **Servos**: 
+  - 2x MG996R servos for pan and tilt movement
+  - Pan-tilt servo mechanism with Arduino controller (running `arduino_servo_bridge.ino`)
+- **Servo Controller**:
+  - 1x PCA9685 16-channel servo controller board
+- **Arduino**: Any Arduino compatible with the Servo library (tested with Arduino R3/Nano/Uno)
+- **Computer**: Linux system (tested on Ubuntu and NVIDIA Jetson Nano)
 - **Connectivity**: USB ports for camera and Arduino
 
 ## Installation and Setup
@@ -163,7 +173,7 @@ This will automatically load the most recent log file and generate visualization
 You can also specify a particular log file:
 
 ```bash
-python examples/analyze_tracking_logs.py --experiment experiment_20250913_123045
+python examples/analyze_tracking_logs.py --experiment experiment_20250913_190229
 ```
 
 Or for legacy log files:

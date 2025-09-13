@@ -2,8 +2,8 @@
   "camera": {
     "index": 0,
     "resolution": [
-      640,
-      480
+      1920,
+      1080
     ],
     "fps": 30
   },
@@ -12,7 +12,8 @@
     "baudrate": 115200,
     "pan_channel": 0,
     "tilt_channel": 1,
-    "inverted_pan": true
+    "inverted_pan": true,
+    "error_to_angle_ratio": 0.15
   },
   "detection": {
     "model_complexity": 1,
@@ -22,10 +23,10 @@
   "tracking": {
     "model_path": "yolov8n.pt",
     "confidence_threshold": 0.5,
-    "dead_zone": 50
+    "dead_zone": 20
   },
   "pantilt": {
-    "dead_zone": 50
+    "dead_zone": 20
   },
   "display": {
     "window_size": [

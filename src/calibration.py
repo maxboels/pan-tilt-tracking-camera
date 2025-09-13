@@ -162,16 +162,33 @@ class CameraServoCalibrator:
         elif pan_error > 0 and tilt_error > 0: quadrant = "BOTTOM-RIGHT"
         elif pan_error < 0 and tilt_error > 0: quadrant = "BOTTOM-LEFT"
         
-        # DIRECT MAPPING based on direction settings
-        # Simplified conversion with configurable inversions
-        pan_scale = 0.1   # How much to turn for each pixel of error (adjust as needed)
-        tilt_scale = 0.08  # How much to turn for each pixel of error (adjust as needed)
+        # IMPROVED MAPPING for wide-angle cameras (130° FOV)
+        # Calculate frame size for scaling
+        frame_width = self.frame_center[0] * 2
+        frame_height = self.frame_center[1] * 2
+        
+        # Dynamic scaling based on pixel position (more aggressive at edges for wide-angle lens)
+        # For wide-angle cameras, use non-linear mapping to compensate for distortion
+        normalized_x = pan_error / (frame_width / 2)  # -1 to 1
+        normalized_y = tilt_error / (frame_height / 2)  # -1 to 1
+        
+        # Apply non-linear correction for wide-angle lens
+        # This increases sensitivity at the edges where distortion is greater
+        if abs(normalized_x) > 0.5:
+            pan_scale = 0.15 + 0.05 * (abs(normalized_x) - 0.5) / 0.5  # 0.15-0.2 based on distance from center
+        else:
+            pan_scale = 0.15  # Base scale factor
+            
+        if abs(normalized_y) > 0.5:
+            tilt_scale = 0.12 + 0.03 * (abs(normalized_y) - 0.5) / 0.5  # 0.12-0.15 based on distance from center
+        else:
+            tilt_scale = 0.12  # Base scale factor
         
         # Apply user direction settings
         pan_multiplier = -1 if INVERT_PAN_DIRECTION else 1
         tilt_multiplier = -1 if INVERT_TILT_DIRECTION else 1
         
-        # Calculate servo angles with direction control
+        # Calculate servo angles with direction control and dynamic scaling
         # For RIGHT side (positive error), pan right (positive angle if not inverted)
         # For BOTTOM (positive error), tilt down (negative angle if not inverted)
         pan_angle = pan_error * pan_scale * pan_multiplier

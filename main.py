@@ -142,6 +142,12 @@ class PanTiltYOLOTracker:
         if not self.servo_controller.connect():
             print("Warning: Failed to connect to servo controller (running in simulation mode)")
         else:
+            # Apply error_to_angle_ratio from config if provided
+            servo_config = self.config.get('servo', {})
+            if 'error_to_angle_ratio' in servo_config:
+                self.servo_controller.error_to_angle_ratio = servo_config.get('error_to_angle_ratio')
+                print(f"Applied custom error_to_angle_ratio: {self.servo_controller.error_to_angle_ratio}")
+            
             # Center servos at startup
             self.servo_controller.center_servos()
             time.sleep(1)

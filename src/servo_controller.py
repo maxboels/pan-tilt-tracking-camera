@@ -37,12 +37,12 @@ class ArduinoServoController:
         self.current_pan = 0
         self.current_tilt = 0
         
-        # Movement parameters - simple and direct
-        self.max_speed = 10.0  # degrees per update
-        self.error_to_angle_ratio = 0.1  # Convert pixel error to degrees
+        # Movement parameters - enhanced for wide-angle camera
+        self.max_speed = 12.0  # degrees per update - slightly faster for better responsiveness
+        self.error_to_angle_ratio = 0.15  # Convert pixel error to degrees - increased for better range
         
-        # No deadzone for testing - we want to see all movements
-        self.deadzone_pixels = 0
+        # Small deadzone to prevent micro-jitter
+        self.deadzone_pixels = 5
         
         # Calibration offsets - adjust these to correct servo alignment
         self.pan_offset = 0  # Add this to pan commands

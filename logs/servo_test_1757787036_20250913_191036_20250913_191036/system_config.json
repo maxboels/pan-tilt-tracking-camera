@@ -1,0 +1,117 @@
+{
+  "app_config": {
+    "camera": {
+      "index": 0,
+      "resolution": [
+        640,
+        480
+      ],
+      "fps": 30
+    },
+    "servo": {
+      "port": "/dev/ttyACM0",
+      "baudrate": 115200,
+      "pan_channel": 0,
+      "tilt_channel": 1,
+      "inverted_pan": true
+    },
+    "detection": {
+      "model_complexity": 1,
+      "min_detection_confidence": 0.5,
+      "min_tracking_confidence": 0.5
+    },
+    "tracking": {
+      "model_path": "yolov8n.pt",
+      "confidence_threshold": 0.5,
+      "dead_zone": 50
+    },
+    "pantilt": {
+      "dead_zone": 50
+    },
+    "display": {
+      "window_size": [
+        1280,
+        720
+      ]
+    }
+  },
+  "calibration": {
+    "calibration_points": [
+      [
+        961,
+        541,
+        -45,
+        -30
+      ],
+      [
+        961,
+        541,
+        -45,
+        0
+      ],
+      [
+        961,
+        541,
+        -45,
+        30
+      ],
+      [
+        961,
+        541,
+        0,
+        -30
+      ],
+      [
+        961,
+        541,
+        0,
+        0
+      ],
+      [
+        961,
+        541,
+        0,
+        30
+      ],
+      [
+        961,
+        541,
+        45,
+        -30
+      ],
+      [
+        961,
+        541,
+        45,
+        0
+      ],
+      [
+        961,
+        541,
+        45,
+        30
+      ]
+    ],
+    "timestamp": 1757688155.597435,
+    "transformation_matrix": [
+      [
+        0.0007572661569377559,
+        0.00038237487243076397,
+        -0.9345975828022405
+      ],
+      [
+        -0.0006706696426706608,
+        0.0005339029742620694,
+        0.3556720175307008
+      ],
+      [
+        -3.983754487273886e-06,
+        -1.849635141807592e-06,
+        0.004829040673676964
+      ]
+    ]
+  },
+  "timestamp": 1757787036.1441684,
+  "date": "2025-09-13 19:10:36",
+  "log_file": "tracking_data.log"
+}
