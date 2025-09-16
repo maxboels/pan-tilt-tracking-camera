@@ -9,6 +9,49 @@ import time
 import threading
 from collections import deque
 
+def calculate_pan_command(    def calculate_tilt_command(self, tilt_error):
+        """Convert tilt error to servo angle adjustment using progressive response curve"""
+        print(f"Tilt error input: {tilt_error} pixels")
+        
+        # Apply deadzone - don't move if error is small
+        if abs(tilt_error) < self.deadzone_pixels:
+            print(f"Tilt error within deadzone ({self.deadzone_pixels} pixels), no movement")
+            return self.current_tilt
+        
+        # Progressive error-to-angle ratio: larger errors get proportionally larger responses
+        # Base ratio for small movements
+        base_ratio = self.error_to_angle_ratio
+        
+        # Calculate a scaling factor that increases with error magnitude
+        # Small errors: close to 1.0 (minimal scaling)
+        # Large errors: up to 1.5-2.0x scaling for faster response
+        error_magnitude = abs(tilt_error)
+        
+        # Smooth curve that increases the ratio for larger errors
+        # Tilt uses slightly gentler scaling compared to pan for better stability
+        error_scale = 1.0 + 0.4 * min(1.0, (error_magnitude - self.deadzone_pixels) / 300.0) ** 1.2
+        
+        # Apply the progressive ratio
+        scaled_ratio = base_ratio * error_scale
+        angle_adjustment = tilt_error * scaled_ratio
+        
+        print(f"Tilt angle adjustment: {angle_adjustment:.2f}° (ratio: {scaled_ratio:.3f})")
+        
+        # Limit movement speed
+        angle_adjustment = max(-self.max_speed, min(self.max_speed, angle_adjustment))
+        print(f"Tilt angle adjustment (speed limited): {angle_adjustment:.2f}°"):
+        """Convert pan error to servo angle adjustment"""
+        
+        # Apply deadzone - don't move if error is small
+        if abs(pan_error) < self.deadzone_pixels:
+            return 0.0
+        
+        # Convert pixel error to angle adjustment
+        angle_adjustment = pan_error * self.error_to_angle_ratio
+        
+        # Limit movement speed
+        angle_adjustment = max(-self.max_speed, min(self.max_speed, angle_adjustment))
+
 class ArduinoServoController:
     def __init__(self, port='/dev/ttyUSB0', baudrate=115200, pan_channel=0, tilt_channel=1, inverted_pan=True, config=None):
         """
@@ -47,10 +90,6 @@ class ArduinoServoController:
         
         # Small deadzone to prevent micro-jitter
         self.deadzone_pixels = servo_config.get('dead_zone', 2)
-        
-        # Rate limiting parameters
-        self.last_movement_time = 0
-        self.min_movement_interval = 0.3  # Seconds between movements (rate limiting)
         
         # Progressive curve parameters for dynamic response
         self.pan_max_scale = servo_config.get('pan_max_scale', 0.8)  # Maximum multiplier for pan ratio
@@ -282,25 +321,7 @@ class ArduinoServoController:
         return new_angle
     
     def move_servos(self, pan_angle, tilt_angle):
-        """Move both servos to specified angles with rate limiting"""
-        # Check if we've defined the last_movement_time attribute, if not create it
-        if not hasattr(self, 'last_movement_time'):
-            self.last_movement_time = 0
-            self.min_movement_interval = 0.2  # Minimum time between movements (seconds)
-        
-        # Rate limiting - ensure at least min_movement_interval seconds between movements
-        current_time = time.time()
-        elapsed = current_time - self.last_movement_time
-        
-        if elapsed < self.min_movement_interval:
-            # Not enough time has passed since last movement
-            print(f"Rate limiting: Skipping movement, only {elapsed:.3f}s elapsed")
-            return False
-        
-        # Update the timestamp
-        self.last_movement_time = current_time
-        
-        # Proceed with movement
+        """Move both servos to specified angles"""
         pan_success = self.move_servo(self.pan_channel, pan_angle)
         tilt_success = self.move_servo(self.tilt_channel, tilt_angle)
         

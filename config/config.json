@@ -14,7 +14,13 @@
     "pan_channel": 0,
     "tilt_channel": 1,
     "inverted_pan": true,
-    "error_to_angle_ratio": 0.15
+    "error_to_angle_ratio": 0.07,
+    "max_speed": 20.0,
+    "dead_zone": 10,
+    "pan_max_scale": 0.5,
+    "tilt_max_scale": 0.4,
+    "curve_exponent": 1.5,
+    "error_scale_threshold": 350.0
   },
   "detection": {
     "model_complexity": 1,
@@ -24,10 +30,10 @@
   "tracking": {
     "model_path": "yolov8n.pt",
     "confidence_threshold": 0.5,
-    "dead_zone": 20
+    "dead_zone": 30
   },
   "pantilt": {
-    "dead_zone": 20
+    "dead_zone": 30
   },
   "display": {
     "window_size": [

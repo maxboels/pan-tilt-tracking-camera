@@ -158,7 +158,7 @@ class CameraServoCalibrator:
         elif pan_error > 0 and tilt_error > 0: quadrant = "BOTTOM-RIGHT"
         elif pan_error < 0 and tilt_error > 0: quadrant = "BOTTOM-LEFT"
         
-        # IMPROVED MAPPING for wide-angle cameras (130° FOV)
+        # ENHANCED MAPPING for wide-angle cameras (130° FOV)
         # Calculate frame size for scaling
         frame_width = self.frame_center[0] * 2
         frame_height = self.frame_center[1] * 2
@@ -168,17 +168,23 @@ class CameraServoCalibrator:
         normalized_x = pan_error / (frame_width / 2)  # -1 to 1
         normalized_y = tilt_error / (frame_height / 2)  # -1 to 1
         
-        # Apply non-linear correction for wide-angle lens
-        # This increases sensitivity at the edges where distortion is greater
-        if abs(normalized_x) > 0.5:
-            pan_scale = 0.15 + 0.05 * (abs(normalized_x) - 0.5) / 0.5  # 0.15-0.2 based on distance from center
-        else:
-            pan_scale = 0.15  # Base scale factor
-            
-        if abs(normalized_y) > 0.5:
-            tilt_scale = 0.12 + 0.03 * (abs(normalized_y) - 0.5) / 0.5  # 0.12-0.15 based on distance from center
-        else:
-            tilt_scale = 0.12  # Base scale factor
+        # Apply cubic non-linear correction for wide-angle lens
+        # This significantly improves targeting accuracy with wide-angle lenses
+        # by applying stronger correction at the edges while maintaining precision at center
+        
+        # Calculate non-linear scale factor with cubic function for more aggressive edge correction
+        # This gives better targeting accuracy across the entire frame
+        pan_scale_base = 0.18  # Increased base scale for faster response
+        tilt_scale_base = 0.15  # Increased base scale
+        
+        # Non-linear scaling that increases more aggressively at edges
+        # Higher exponent = more aggressive edge correction
+        pan_edge_factor = abs(normalized_x)**2 * 0.12  # Quadratic scaling for edges
+        tilt_edge_factor = abs(normalized_y)**2 * 0.08  # Quadratic scaling for edges
+        
+        # Calculate final scale factors
+        pan_scale = pan_scale_base + pan_edge_factor  # More responsive pan
+        tilt_scale = tilt_scale_base + tilt_edge_factor  # More responsive tilt
         
         # Apply user direction settings
         pan_multiplier = -1 if INVERT_PAN_DIRECTION else 1

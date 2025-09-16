@@ -158,13 +158,13 @@ def create_kalman_tracker(tracking_mode):
         KalmanTracker instance with mode-appropriate settings
     """
     if tracking_mode == 'turret':
-        # Turret mode - prioritize accuracy and responsiveness
-        # Lower process noise = more trust in model predictions
-        # Lower measurement noise = more trust in measurements
-        # For stationary targets, we want to reduce hunting/drifting:
-        return KalmanTracker(process_noise=0.005, measurement_noise=0.03)
+        # Turret mode - heavily prioritize stability over responsiveness
+        # Very low process noise = high trust in model predictions (smooth movement)
+        # Higher measurement noise = less trust in individual measurements (filter jitter)
+        # This creates very strong smoothing effect:
+        return KalmanTracker(process_noise=0.003, measurement_noise=0.2)
     else:
-        # Surveillance mode - prioritize smooth movement
-        # Higher process noise = less trust in model predictions
-        # Higher measurement noise = less trust in measurements (smooth out jitter)
-        return KalmanTracker(process_noise=0.01, measurement_noise=0.12)
+        # Surveillance mode - extremely smooth movement
+        # Very low process noise = very high trust in model predictions
+        # Very high measurement noise = very low trust in measurements (maximize smoothing)
+        return KalmanTracker(process_noise=0.005, measurement_noise=0.25)

@@ -26,7 +26,6 @@ class MotionCompensator:
         # Store configuration parameters
         self.debug = bool(debug)  # Ensure it's a boolean value
         self.stabilization_factor = stabilization_factor
-        self.stabilization_factor = stabilization_factor
         
         # Store previous positions and movements
         self.previous_target_pos = None
@@ -40,13 +39,13 @@ class MotionCompensator:
         self.tilt_to_pixel_factor = 20.0  # Estimated pixels per degree of tilt
         
         # Add a deadband to ignore tiny movements (in pixels)
-        self.base_deadband = 5.0          # Base deadband size
-        self.position_deadband = 5.0      # Adaptive deadband, increases with confidence
+        self.base_deadband = 10.0         # Increased deadband size
+        self.position_deadband = 10.0     # Increased adaptive deadband
         
         # Confidence in stationary targets
-        self.stationary_confidence = 0.0  # 0.0-1.0 confidence that target is stationary
+        self.stationary_confidence = 0.5  # Start with medium confidence that target is stationary
         self.consistency_buffer = []      # Buffer of recent position deltas
-        self.max_buffer_size = 10         # Increased buffer size for better stability
+        self.max_buffer_size = 15         # Increased buffer size for stronger smoothing
         
         # Activity detection
         self.movement_threshold = 3.0     # Degrees per second to consider "moving" (reduced)
@@ -204,21 +203,22 @@ class MotionCompensator:
         
         # Add position smoothing for stationary targets
         if self.stationary_confidence > 0.5 and len(self.position_history) > 2:
+            # For turret mode, we need more aggressive stabilization
             # Use stronger smoothing as confidence increases
             # Get more recent history for higher accuracy
             history_length = min(len(self.position_history), 
-                                int(5 + (self.max_history_size - 5) * self.stationary_confidence))
+                              int(5 + (self.max_history_size - 5) * self.stationary_confidence))
             recent_positions = self.position_history[-history_length:]
-            
-            # Apply weighted average with history for additional stability
+        
+        # Apply weighted average with history for additional stability
             # Weight increases with stationary confidence and tracking duration
-            base_weight = self.stationary_confidence * 0.5
-            duration_factor = min(1.0, self.tracking_duration / 30)  # 30 frames = 1 sec at 30fps
-            history_weight = base_weight * (1 + 0.5 * duration_factor)
+            base_weight = self.stationary_confidence * 0.7  # Increased base weight for better stability
+            duration_factor = min(1.0, self.tracking_duration / 20)  # 20 frames = ~0.7 sec at 30fps (faster stabilization)
+            history_weight = base_weight * (1 + 0.7 * duration_factor)  # More aggressive weighting
             
             # For very high confidence, use even stronger smoothing
-            if self.stationary_confidence > 0.9:
-                history_weight = min(0.9, history_weight + 0.2)
+            if self.stationary_confidence > 0.8:  # Trigger earlier
+                history_weight = min(0.95, history_weight + 0.3)  # Even stronger smoothing
                 
             recent_avg_x = sum(pos[0] for pos in recent_positions) / len(recent_positions)
             recent_avg_y = sum(pos[1] for pos in recent_positions) / len(recent_positions)

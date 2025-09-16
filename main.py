@@ -97,7 +97,8 @@ class PanTiltYOLOTracker:
         self.servo_controller = ArduinoServoController(
             port=servo_config.get('port', '/dev/ttyACM0'),
             baudrate=servo_config.get('baudrate', 115200),
-            inverted_pan=servo_config.get('inverted_pan', True)
+            inverted_pan=servo_config.get('inverted_pan', True),
+            config=config  # Pass the full config for progressive curve parameters
         )
         
         # YOLO tracker setup
@@ -354,11 +355,47 @@ class PanTiltYOLOTracker:
                     current_tilt = self.servo_controller.current_tilt
                     # print(f"DEBUG: Current servo positions: Pan={current_pan:.1f}, Tilt={current_tilt:.1f}")
                     
-                    # Calculate smooth movement
-                    max_step = 2.0  # degrees per control cycle
+                    # Calculate adaptive movement - faster for large errors, precise for small errors
+                    # Calculate error magnitude (how far from center in pixels)
+                    error_magnitude = np.sqrt(pixel_error_x**2 + pixel_error_y**2)
+                    
+                    # Progressive curve for smoother motion - scales based on distance from center
+                    # Parameters for the progressive curve
+                    max_possible_step = 20.0  # Maximum step size for very large errors
+                    min_step = 2.0           # Minimum step size for fine adjustments
+                    reference_distance = 200.0  # Reference distance for scaling
+                    
+                    # Calculate step size using a smooth function:
+                    # - Starts at min_step for small errors
+                    # - Approaches max_possible_step asymptotically for large errors
+                    # - Provides smooth transition across all distances
+                    curve_steepness = 1.5  # Controls how quickly the curve rises (higher = steeper)
+                    
+                    # Sigmoid-inspired curve with good properties for servo control
+                    max_step = min_step + (max_possible_step - min_step) * (
+                        1.0 - 1.0 / (1.0 + (error_magnitude / reference_distance) ** curve_steepness)
+                    )
+                    
+                    # For turret mode, we can be even more responsive with faster ramp-up
+                    if self.config.get('tracking_mode') == 'turret':
+                        # Make the curve rise faster for turret mode
+                        turret_boost = 1.2  # Additional scaling factor for turret mode
+                        max_step = min_step + (max_step - min_step) * turret_boost
+                    
+                    # Calculate movement with stronger response for turret mode
+                    if self.config.get('tracking_mode') == 'turret':
+                        # Much more aggressive for turret mode (exact center targeting)
+                        acceleration_factor = 2.0  # Significantly increased for faster response
+                    else:
+                        # More gentle for surveillance mode
+                        acceleration_factor = 1.0
+                        
                     pan_diff = target_pan - current_pan
                     tilt_diff = target_tilt - current_tilt
-                    # print(f"DEBUG: Servo movement: Pan diff={pan_diff:.1f}, Tilt diff={tilt_diff:.1f}")
+                    
+                    # Apply acceleration factor
+                    pan_diff *= acceleration_factor
+                    tilt_diff *= acceleration_factor
                     
                     # Limit movement speed
                     if abs(pan_diff) > max_step:
@@ -375,8 +412,11 @@ class PanTiltYOLOTracker:
                     tilt_direction = "UP" if new_tilt > current_tilt else "DOWN"
                     # print(f"DEBUG: Expected camera movement: Pan={pan_direction}, Tilt={tilt_direction}")
                     
-                    # Move servos if movement is significant
-                    if abs(pan_diff) > 0.5 or abs(tilt_diff) > 0.5:
+                    # Move servos if movement is needed - much lower threshold for more responsive tracking
+                    # Use almost no threshold for turret mode to ensure quick response
+                    movement_threshold = 0.05 if self.config.get('tracking_mode') == 'turret' else 0.2
+                    
+                    if abs(pan_diff) > movement_threshold or abs(tilt_diff) > movement_threshold:
                         self.servo_controller.move_servos(new_pan, new_tilt)
                         
                         # Update motion compensator with servo movement if enabled
@@ -396,12 +436,19 @@ class PanTiltYOLOTracker:
                 except Exception as e:
                     print(f"Control loop error: {e}")
             
-            time.sleep(0.05)  # 20Hz control rate
+            time.sleep(0.02)  # 50Hz control rate - significantly increased for faster response
     
     def calculate_pan_tilt_error(self, target_pos):
         """Calculate pan and tilt error from center"""
         pan_error = target_pos[0] - self.frame_center[0]
         tilt_error = target_pos[1] - self.frame_center[1]
+        
+        # For turret mode, apply a gain factor to make the system more responsive
+        if self.config.get('tracking_mode') == 'turret':
+            # Apply a gain to make tracking much more aggressive for turret mode
+            error_gain = 2.0  # Significantly increased gain for much more aggressive tracking
+            return pan_error * error_gain, tilt_error * error_gain
+        
         return pan_error, tilt_error
     
     def process_frame(self, frame):
