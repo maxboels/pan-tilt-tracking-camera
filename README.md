@@ -7,7 +7,7 @@ A computer vision system for tracking people using a USB camera and controlling 
 ## Features
 
 - **YOLO Person Detection**: Uses YOLOv8 for robust and fast person detection
-- **Real-time Tracking**: Smooth tracking with position smoothing and dead-zone control
+- **Real-time Tracking**: Smooth tracking with Kalman filtering and position smoothing
 - **Pan-Tilt Control**: Arduino-based servo control with inverted pan servo support
 - **USB Camera Support**: Works with standard UVC USB cameras
 - **Performance Logging**: Comprehensive logging system for evaluation and analysis
@@ -80,6 +80,7 @@ python main.py --record
 | `--no-tracking`, `-n` | Start with tracking disabled (servos won't move) |
 | `--record`, `-r` | Record video of the tracking session |
 | `--mode`, `-m` | Tracking mode: 'surveillance' (keeps person in scene) or 'turret' (aims at center of bounding box) |
+| `--no-kalman`, `-nk` | Disable Kalman filtering (enabled by default) |
 
 ### Examples
 
@@ -87,11 +88,14 @@ python main.py --record
 # Record video while tracking (default surveillance mode)
 python main.py --record
 
-# Run in turret mode (precise targeting)
+# Use turret mode for precision targeting
 python main.py --mode turret
 
-# Run in surveillance mode (explicit, smoother tracking)
+# Use standard surveillance mode
 python main.py --mode surveillance
+
+# Kalman filtering is enabled by default for improved tracking
+python main.py
 
 # Record video with a specific experiment name (for organization)
 python main.py --record --experiment tracking_demo_1
@@ -100,6 +104,7 @@ python main.py --record --experiment tracking_demo_1
 python main.py --record --no-tracking
 
 # Record, track in turret mode, and run evaluation when finished
+# Run with all options (Kalman filtering is enabled by default)
 python main.py --record --mode turret --eval
 ```
 
@@ -123,6 +128,24 @@ Switch between modes using the `--mode` command line argument:
 ```bash
 python main.py --mode surveillance  # Default mode
 python main.py --mode turret        # Precision targeting mode
+```
+
+### Kalman Filtering
+
+The system supports Kalman filtering for improved tracking performance:
+
+- Predicts target positions based on estimated velocity
+- Maintains tracking during brief occlusions
+- Reduces jitter while maintaining responsiveness
+- Automatically tunes parameters based on the selected tracking mode
+- Turret mode uses more responsive filter settings
+- Surveillance mode uses smoother filter settings
+
+Kalman filtering is enabled by default. If needed, you can disable it with the `--no-kalman` flag:
+```bash
+python main.py  # Kalman filtering is enabled by default
+python main.py --mode turret  # Precision targeting with Kalman filtering
+python main.py --no-kalman  # Disable Kalman filtering if needed
 ```
 
 ### Interactive Controls

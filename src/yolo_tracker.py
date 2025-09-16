@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from typing import List, Tuple, Optional
 import os
 
+# Import Kalman tracker
+from src.kalman_tracker import KalmanTracker, create_kalman_tracker
+
 
 @dataclass
 class Detection:
@@ -43,7 +46,8 @@ class YOLOTracker:
     """YOLOv8-based object detector and tracker"""
     
     def __init__(self, model_path: str = "yolov8n.pt", confidence_threshold: float = 0.5, 
-                 track_head: bool = False, tracking_mode: str = "surveillance"):
+                 track_head: bool = False, tracking_mode: str = "surveillance", 
+                 use_kalman: bool = True):  # Set use_kalman default to True
         """Initialize YOLOv8 detector"""
         print(f"Loading YOLO model: {model_path}")
         try:
@@ -68,6 +72,7 @@ class YOLOTracker:
         self.confidence_threshold = confidence_threshold
         self.track_head = track_head
         self.tracking_mode = tracking_mode
+        self.use_kalman = use_kalman
         
         # Tracking parameters - adjusted based on tracking mode
         self.current_target = None
@@ -80,6 +85,12 @@ class YOLOTracker:
         else:
             self.max_history = 10  # Larger history for smooth surveillance movement
             print("Using SURVEILLANCE tracking mode (keeps person in scene)")
+        
+        # Initialize Kalman filter if enabled
+        self.kalman_tracker = None
+        if self.use_kalman:
+            self.kalman_tracker = create_kalman_tracker(self.tracking_mode)
+            print(f"Kalman filter enabled for {'turret' if self.tracking_mode == 'turret' else 'surveillance'} mode")
         
         # Object ID to track (if multiple people are detected)
         self.tracked_id = None
@@ -158,16 +169,44 @@ class YOLOTracker:
         
         if current_target:
             self.current_target = current_target
+            
             # Add to history for smoothing
-            self.target_history.append(current_target.center)
+            if self.use_kalman and self.kalman_tracker:
+                # Update Kalman filter with new measurement
+                filtered_pos = self.kalman_tracker.update(current_target.center)
+                # Store filtered position in history
+                self.target_history.append(filtered_pos)
+            else:
+                # Standard tracking - store actual position
+                self.target_history.append(current_target.center)
+                
+            # Maintain history length
             if len(self.target_history) > self.max_history:
                 self.target_history.pop(0)
         else:
-            # Gradually fade out tracking if no detections
-            if len(self.target_history) > 0:
-                self.target_history.pop(0)
+            # No detection in this frame
+            if self.use_kalman and self.kalman_tracker and self.kalman_tracker.initialized:
+                # Use Kalman prediction when no detection is available
+                # But only for a limited number of frames to avoid drifting
+                if len(self.target_history) > 0 and self.kalman_tracker.frames_without_detection < 10:
+                    predicted_pos = self.kalman_tracker.predict()
+                    self.target_history.append(predicted_pos)
+                    if len(self.target_history) > self.max_history:
+                        self.target_history.pop(0)
+                else:
+                    # Gradually fade out tracking if no detections for too long
+                    if len(self.target_history) > 0:
+                        self.target_history.pop(0)
+            else:
+                # Standard behavior - gradually fade out tracking
+                if len(self.target_history) > 0:
+                    self.target_history.pop(0)
+            
+            # Clear current target if no history remains
             if not self.target_history:
                 self.current_target = None
+                if self.use_kalman and self.kalman_tracker:
+                    self.kalman_tracker.reset()
         
         return self.current_target
     
@@ -176,6 +215,15 @@ class YOLOTracker:
         if not self.target_history:
             return None
         
+        # If using Kalman filter, the positions in target_history are already filtered
+        if self.use_kalman and self.kalman_tracker and self.kalman_tracker.initialized:
+            # For Kalman, we can just use the most recent filtered position
+            # (which already accounts for velocity and acceleration)
+            if self.target_history:
+                return self.target_history[-1]
+            return None
+            
+        # Otherwise use weighted average smoothing method
         # Adjust weights based on tracking mode
         if self.tracking_mode == "turret":
             # For turret mode: aim precisely at the target center
@@ -244,6 +292,8 @@ class YOLOTracker:
         """Reset tracking state"""
         self.current_target = None
         self.target_history.clear()
+        if self.use_kalman and self.kalman_tracker:
+            self.kalman_tracker.reset()
         print("Tracking reset")
 
 

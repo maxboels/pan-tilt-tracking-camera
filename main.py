@@ -98,7 +98,8 @@ class PanTiltYOLOTracker:
         self.yolo_tracker = YOLOTracker(
             model_path=tracking_config.get('model_path', 'yolov8n.pt'),
             confidence_threshold=tracking_config.get('confidence_threshold', 0.5),
-            tracking_mode=config.get('tracking_mode', 'surveillance')
+            tracking_mode=config.get('tracking_mode', 'surveillance'),
+            use_kalman=config.get('use_kalman', False)
         )
         
         # Calibration setup
@@ -643,6 +644,8 @@ def main():
                        help='Record video of tracking session')
     parser.add_argument('--mode', '-m', choices=['surveillance', 'turret'], default='surveillance',
                        help='Tracking mode: surveillance (keeps person in scene) or turret (aims at center of bounding box)')
+    parser.add_argument('--no-kalman', '-nk', action='store_true',
+                       help='Disable Kalman filtering (enabled by default)')
     
     args = parser.parse_args()
     
@@ -666,6 +669,7 @@ def main():
     # Add recording flag and tracking mode
     config['record_video'] = args.record
     config['tracking_mode'] = args.mode
+    config['use_kalman'] = not args.no_kalman  # Kalman enabled by default
     
     # Create and run tracker
     tracker = PanTiltYOLOTracker(config)
