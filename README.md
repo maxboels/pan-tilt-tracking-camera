@@ -60,6 +60,12 @@ The main application uses YOLOv8 to detect people in the camera feed and control
 ```bash
 # Run with default settings
 python main.py
+
+# Run without tracking (camera will show detections but won't move servos)
+python main.py --no-tracking
+
+# Run with video recording enabled
+python main.py --record
 ```
 
 ### Command-line Arguments
@@ -71,18 +77,23 @@ python main.py
 | `--model` | Custom YOLO model path |
 | `--experiment`, `-e` | Name for this experiment run (for logging) |
 | `--eval` | Automatically run evaluation when quitting |
+| `--no-tracking`, `-n` | Start with tracking disabled (servos won't move) |
+| `--record`, `-r` | Record video of the tracking session |
 
 ### Examples
 
 ```bash
-# Use a specific camera
-python main.py --camera 1
+# Record video while tracking
+python main.py --record
 
-# Use a different YOLO model
-python main.py --model yolov8s.pt
+# Record video with a specific experiment name (for organization)
+python main.py --record --experiment tracking_demo_1
 
-# Name your experiment and enable auto-evaluation
-python main.py --experiment my_tracking_test --eval
+# Record without tracking (useful for creating test footage)
+python main.py --record --no-tracking
+
+# Record, track, and run evaluation when finished
+python main.py --record --eval
 ```
 
 ### Interactive Controls

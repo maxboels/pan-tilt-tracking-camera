@@ -1,0 +1,40 @@
+=== Tracking Analysis Summary ===
+Log file: /home/maxboels/projects/pan-tilt-tracking-camera/logs/experiment_20250916_165108/tracking_data.log
+Analysis date: 2025-09-16 16:52:06.617719
+
+Total frames analyzed: 404
+Duration: 47.20 seconds
+
+Person detection rate: 100.00% (404/404 frames)
+Average processing time: 7.60 ms
+Maximum processing time: 1905.19 ms
+Average FPS: 131.53
+
+Total pan movement: 485.65 degrees
+Total tilt movement: 79.56 degrees
+Average pan speed: 10.32 degrees/sec
+Average tilt speed: 1.69 degrees/sec
+
+
+=== Enhanced Tracking Metrics ===
+Average tracking error: 163.99 pixels
+Maximum tracking error: 545.00 pixels
+Standard deviation of error: 102.36 pixels
+Average X-axis error: 159.47 pixels
+Average Y-axis error: 23.83 pixels
+Maximum X-axis error: 545.00 pixels
+Maximum Y-axis error: 70.00 pixels
+
+Tracking Accuracy:
+  Target within deadzone (20 px): 0.2% of frames
+  Target within 20 px of center: 0.2% of frames
+  Target within 50 px of center: 10.9% of frames
+  Target within 100 px of center: 31.7% of frames
+  Target within 200 px of center: 64.9% of frames
+  Target within 400 px of center: 95.5% of frames
+
+Quadrant Distribution:
+  BOTTOM-LEFT: 47.3%
+  TOP-LEFT: 26.2%
+  TOP-RIGHT: 26.0%
+  CENTER: 0.5%

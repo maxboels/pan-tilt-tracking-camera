@@ -8,7 +8,11 @@ env/
 tracking_performance_*.csv
 logs/experiment_*/*.json
 logs/experiment_*/tracking_data.log
-
+logs/experiment_*/analysis/*.mp4
+logs/experiment_*/analysis/*.csv
+logs/experiment_*/videos/*.mp4
 
 src/*.cpython-312.pyc
 src/__pycache__/*.cpython-312.pyc
+*tracking_data*.mp4
+*.mp4

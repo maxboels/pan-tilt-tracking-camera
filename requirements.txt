@@ -3,18 +3,18 @@
 
 # Computer vision and tracking
 opencv-python>=4.5.0
-ultralytics>=8.0.0
+ultralytics>=8.0.0  # Make sure we're using latest YOLOv8
 
 # Hardware communication
 pyserial>=3.5
 adafruit-circuitpython-pca9685
 
 # Scientific computing
-numpy>=1.21.0
+numpy>=1.20.0
 
 # Utilities
 mediapipe  # Keeping for potential fallback option
 
 # Analysis and logging
 pandas>=1.3.0
-matplotlib>=3.4.0
+matplotlib>=3.5.0

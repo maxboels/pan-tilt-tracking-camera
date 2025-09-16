@@ -23,6 +23,8 @@ class USBCamera:
         """
         self.camera_index = camera_index
         self.resolution = resolution
+        self.width = resolution[0]  # Add explicit width attribute
+        self.height = resolution[1] # Add explicit height attribute
         self.fps = fps
         
         # OpenCV capture object
@@ -37,10 +39,6 @@ class USBCamera:
         self.frame_count = 0
         self.start_time = None
         self.current_fps = 0
-        
-        # Frame dimensions
-        self.frame_width = 0
-        self.frame_height = 0
     
     def open(self):
         """Open camera and initialize capture"""

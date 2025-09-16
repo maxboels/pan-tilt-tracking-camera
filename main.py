@@ -20,6 +20,7 @@ from collections import deque
 import threading
 import argparse
 import json
+import datetime
 
 
 def load_config(config_path="config/config.json"):
@@ -115,7 +116,7 @@ class PanTiltYOLOTracker:
         self.running = False
         self.control_thread = None
         self.target_position = None
-        self.tracking_enabled = True
+        self.tracking_enabled = config.get('tracking_enabled', True)
         
         # Performance tracking
         self.fps_counter = deque(maxlen=30)
@@ -125,8 +126,16 @@ class PanTiltYOLOTracker:
         experiment_name = config.get('experiment_name', None)
         self.tracking_logger = TrackingLogger(log_dir="logs", experiment_name=experiment_name)
         
+        # Video recording setup
+        self.record_video = config.get('record_video', False)
+        self.video_writer = None
+        
         print("Pan-Tilt YOLO Tracker initialized")
-    
+        if not self.tracking_enabled:
+            print("Tracking is DISABLED (toggle with 't' key)")
+        if self.record_video:
+            print("Video recording ENABLED - session will be saved to file")
+
     def start(self):
         """Start the tracking system"""
         print("Starting Pan-Tilt YOLO Tracking System...")
@@ -153,6 +162,10 @@ class PanTiltYOLOTracker:
             self.servo_controller.center_servos()
             time.sleep(1)
         
+        # Initialize video recording if enabled
+        if self.record_video:
+            self._initialize_video_recorder()
+        
         # Start control thread
         self.running = True
         self.control_thread = threading.Thread(target=self.control_loop, daemon=True)
@@ -160,6 +173,62 @@ class PanTiltYOLOTracker:
         
         print("System started successfully!")
         return True
+    
+    def _initialize_video_recorder(self):
+        """Initialize video recording"""
+        try:
+            # Get camera resolution from the current frame instead of camera object
+            frame = self.camera.get_frame()
+            if frame is None:
+                print("Warning: Could not get camera frame for video initialization")
+                print("Waiting for first valid frame...")
+                # Wait for a valid frame
+                attempts = 0
+                while frame is None and attempts < 10:
+                    time.sleep(0.2)
+                    frame = self.camera.get_frame()
+                    attempts += 1
+                
+                if frame is None:
+                    print("Failed to get camera frame after multiple attempts")
+                    self.video_writer = None
+                    return
+            
+            # Get dimensions from frame
+            height, width = frame.shape[:2]
+            fps = self.camera.fps if hasattr(self.camera, 'fps') else 30  # Default to 30 fps
+            
+            # Create output directory in experiment folder
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            logs_dir = self.tracking_logger.log_dir
+            video_dir = os.path.join(logs_dir, "videos")
+            os.makedirs(video_dir, exist_ok=True)
+            
+            # Define output filename
+            video_filename = f"tracking_session_{timestamp}.mp4"
+            video_path = os.path.join(video_dir, video_filename)
+            
+            # Create VideoWriter object
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Use mp4v codec (widely supported)
+            self.video_writer = cv2.VideoWriter(
+                video_path, fourcc, fps, (width, height)
+            )
+            
+            if not self.video_writer.isOpened():
+                print(f"Warning: Could not open video writer. Recording disabled.")
+                self.video_writer = None
+                return
+                
+            print(f"Video recording initialized. Output: {video_path}")
+            # Store video path for later reference
+            self.video_path = video_path
+            print(f"Recording video at {width}x{height} @ {fps} fps")
+            
+        except Exception as e:
+            print(f"Error initializing video recorder: {e}")
+            import traceback
+            traceback.print_exc()
+            self.video_writer = None
     
     def stop(self):
         """Stop the tracking system"""
@@ -169,9 +238,17 @@ class PanTiltYOLOTracker:
         if self.control_thread:
             self.control_thread.join(timeout=2)
         
+        # Close video writer if recording
+        if self.video_writer is not None:
+            self.video_writer.release()
+            print(f"Video recording saved to {self.video_path}")
+        
         self.servo_controller.disconnect()
         self.camera.close()
         cv2.destroyAllWindows()
+        
+        # Store experiment name before running evaluation
+        experiment_name = self.tracking_logger.experiment_name
         
         # Run evaluation if enabled
         if self.run_eval:
@@ -187,7 +264,6 @@ class PanTiltYOLOTracker:
             
             # Run the analysis script
             if os.path.exists(analysis_script):
-                experiment_name = self.config.get('experiment_name')
                 if experiment_name:
                     print(f"Executing: {sys.executable} {analysis_script} --experiment {experiment_name}")
                     try:
@@ -465,6 +541,8 @@ class PanTiltYOLOTracker:
         print("  't' - Toggle tracking on/off")
         print("  'c' - Center servos")
         print("  's' - Save current frame")
+        if self.record_video:
+            print("  Recording enabled - saving to video file")
         
         cv2.namedWindow("Pan-Tilt YOLO Tracker", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Pan-Tilt YOLO Tracker", 1280, 720)
@@ -479,6 +557,10 @@ class PanTiltYOLOTracker:
                 
                 # Process frame
                 vis_frame = self.process_frame(frame)
+                
+                # Record frame if recording is enabled
+                if self.video_writer is not None:
+                    self.video_writer.write(vis_frame)
                 
                 # Display
                 cv2.imshow("Pan-Tilt YOLO Tracker", vis_frame)
@@ -554,6 +636,10 @@ def main():
                        help='Name for this experiment run (for logging)')
     parser.add_argument('--eval', action='store_true',
                        help='Automatically run evaluation when quitting')
+    parser.add_argument('--no-tracking', '-n', action='store_true',
+                       help='Start with tracking disabled (can be toggled with "t" key)')
+    parser.add_argument('--record', '-r', action='store_true',
+                       help='Record video of tracking session')
     
     args = parser.parse_args()
     
@@ -570,6 +656,12 @@ def main():
     
     # Add evaluation flag
     config['run_eval'] = args.eval
+    
+    # Add tracking state flag
+    config['tracking_enabled'] = not args.no_tracking
+    
+    # Add recording flag
+    config['record_video'] = args.record
     
     # Create and run tracker
     tracker = PanTiltYOLOTracker(config)

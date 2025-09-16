@@ -259,7 +259,10 @@ def analyze_tracking_log(experiment_name=None, log_file=None):
             break
     
     # Tracking error statistics (if available)
+    tracking_metrics_available = False
+    
     if (target_x_col and target_y_col and center_x_col and center_y_col):
+        tracking_metrics_available = True
         # Calculate tracking error
         df['tracking_error_x'] = df[target_x_col] - df[center_x_col]
         df['tracking_error_y'] = df[target_y_col] - df[center_y_col]
@@ -276,9 +279,53 @@ def analyze_tracking_log(experiment_name=None, log_file=None):
             max_error = error_df.tracking_error_dist.max()
             std_error = error_df.tracking_error_dist.std()
             
+            # Calculate additional tracking metrics
+            avg_error_x = error_df.tracking_error_x.abs().mean()
+            avg_error_y = error_df.tracking_error_y.abs().mean()
+            max_error_x = error_df.tracking_error_x.abs().max()
+            max_error_y = error_df.tracking_error_y.abs().max()
+            
+            # Calculate tracking accuracy metrics
+            # How often the target is within certain distance from center
+            dead_zone_size = 20  # pixels, can be adjusted
+            if 'pantilt' in config and 'dead_zone' in config['pantilt']:
+                dead_zone_size = config['pantilt']['dead_zone']
+            
+            frames_in_deadzone = (error_df.tracking_error_dist <= dead_zone_size).sum()
+            frames_in_deadzone_pct = frames_in_deadzone / len(error_df) * 100
+            
+            # Accuracy at different radii from center
+            accuracy_thresholds = [20, 50, 100, 200, 400]
+            accuracy_stats = {}
+            for threshold in accuracy_thresholds:
+                frames_in_threshold = (error_df.tracking_error_dist <= threshold).sum()
+                accuracy_stats[threshold] = frames_in_threshold / len(error_df) * 100
+            
+            # Calculate quadrant distribution (where in the frame the target appears)
+            error_df['quadrant'] = error_df.apply(
+                lambda row: determine_quadrant(row['tracking_error_x'], row['tracking_error_y']), 
+                axis=1
+            )
+            quadrant_counts = error_df['quadrant'].value_counts(normalize=True) * 100
+            
+            # Print enhanced tracking metrics
+            print("\n=== Enhanced Tracking Metrics ===")
             print(f"Average tracking error: {avg_error:.2f} pixels")
             print(f"Maximum tracking error: {max_error:.2f} pixels")
             print(f"Standard deviation of error: {std_error:.2f} pixels")
+            print(f"Average X-axis error: {avg_error_x:.2f} pixels")
+            print(f"Average Y-axis error: {avg_error_y:.2f} pixels")
+            print(f"Maximum X-axis error: {max_error_x:.2f} pixels")
+            print(f"Maximum Y-axis error: {max_error_y:.2f} pixels")
+            
+            print(f"\nTracking Accuracy:")
+            print(f"  Target within deadzone ({dead_zone_size} px): {frames_in_deadzone_pct:.1f}% of frames")
+            for threshold in accuracy_thresholds:
+                print(f"  Target within {threshold} px of center: {accuracy_stats[threshold]:.1f}% of frames")
+            
+            print("\nQuadrant Distribution:")
+            for quadrant, percentage in quadrant_counts.items():
+                print(f"  {quadrant}: {percentage:.1f}%")
     
     # Create output directory for visualizations
     output_dir = os.path.join(os.path.dirname(tracking_log), "analysis")
@@ -333,6 +380,143 @@ def analyze_tracking_log(experiment_name=None, log_file=None):
                 plt.savefig(os.path.join(output_dir, 'tracking_error.png'), dpi=300)
                 plt.close()
         
+        # Enhanced visualizations for tracking performance
+        if tracking_metrics_available and len(error_df) > 0:
+            # Plot 4: X and Y error over time (separate axis)
+            plt.figure(figsize=(12, 8))
+            
+            plt.subplot(2, 1, 1)
+            plt.plot(error_df.index, error_df.tracking_error_x, 'b-', label='X Error')
+            plt.axhline(y=0, color='r', linestyle='--')
+            plt.title('Horizontal Tracking Error Over Time')
+            plt.ylabel('X Error (pixels)')
+            plt.grid(True)
+            plt.legend()
+            
+            plt.subplot(2, 1, 2)
+            plt.plot(error_df.index, error_df.tracking_error_y, 'g-', label='Y Error')
+            plt.axhline(y=0, color='r', linestyle='--')
+            plt.title('Vertical Tracking Error Over Time')
+            plt.xlabel('Frame')
+            plt.ylabel('Y Error (pixels)')
+            plt.grid(True)
+            plt.legend()
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, 'tracking_error_xy.png'), dpi=300)
+            plt.close()
+            
+            # Plot 5: 2D Scatter plot of target position relative to center
+            plt.figure(figsize=(10, 10))
+            
+            # Find frame dimensions if available
+            frame_width = 1920  # Default fallback
+            frame_height = 1080
+            
+            if center_x_col in df.columns and center_y_col in df.columns:
+                if len(df) > 0 and df[center_x_col].nunique() == 1 and df[center_y_col].nunique() == 1:
+                    frame_width = df[center_x_col].iloc[0] * 2
+                    frame_height = df[center_y_col].iloc[0] * 2
+            
+            # Calculate aspect ratio for the plot
+            aspect_ratio = frame_height / frame_width
+            
+            # Create scatter plot
+            plt.scatter(error_df.tracking_error_x, error_df.tracking_error_y, 
+                       c=error_df.index, cmap='viridis', alpha=0.7)
+            
+            # Draw crosshairs and reference circles
+            plt.axhline(y=0, color='r', linestyle='--', alpha=0.5)
+            plt.axvline(x=0, color='r', linestyle='--', alpha=0.5)
+            
+            # Draw target circles at different distances
+            for radius in [20, 50, 100, 200]:
+                circle = plt.Circle((0, 0), radius, color='r', fill=False, alpha=0.3)
+                plt.gca().add_patch(circle)
+                plt.text(radius*0.7, radius*0.3, f"{radius}px", color='r', alpha=0.7)
+            
+            # Set axis limits to be even around center
+            max_error = max(
+                abs(error_df.tracking_error_x.min()), 
+                abs(error_df.tracking_error_x.max()),
+                abs(error_df.tracking_error_y.min()), 
+                abs(error_df.tracking_error_y.max())
+            )
+            margin = max(100, max_error * 1.1)  # Add some margin
+            
+            plt.xlim(-margin, margin)
+            plt.ylim(-margin * aspect_ratio, margin * aspect_ratio)
+            
+            plt.title('Target Position Relative to Camera Center')
+            plt.xlabel('X Error (pixels)')
+            plt.ylabel('Y Error (pixels)')
+            plt.grid(True)
+            plt.colorbar(label='Frame Index')
+            plt.gca().set_aspect(aspect_ratio)
+            
+            plt.savefig(os.path.join(output_dir, 'target_position_scatter.png'), dpi=300)
+            plt.close()
+            
+            # Plot 6: Heatmap of target position
+            plt.figure(figsize=(10, 10))
+            
+            # Calculate 2D histogram
+            heatmap, xedges, yedges = np.histogram2d(
+                error_df.tracking_error_x, 
+                error_df.tracking_error_y,
+                bins=20,
+                range=[[-margin, margin], [-margin * aspect_ratio, margin * aspect_ratio]]
+            )
+            
+            # Create heatmap plot
+            plt.imshow(heatmap.T, 
+                      origin='lower', 
+                      extent=[-margin, margin, -margin * aspect_ratio, margin * aspect_ratio],
+                      cmap='hot', 
+                      interpolation='nearest')
+            
+            # Draw crosshairs and reference circles
+            plt.axhline(y=0, color='blue', linestyle='--', alpha=0.5)
+            plt.axvline(x=0, color='blue', linestyle='--', alpha=0.5)
+            
+            for radius in [20, 50, 100, 200]:
+                circle = plt.Circle((0, 0), radius, color='cyan', fill=False, alpha=0.3)
+                plt.gca().add_patch(circle)
+            
+            plt.title('Target Position Density')
+            plt.xlabel('X Error (pixels)')
+            plt.ylabel('Y Error (pixels)')
+            plt.colorbar(label='Frequency')
+            plt.gca().set_aspect(aspect_ratio)
+            
+            plt.savefig(os.path.join(output_dir, 'target_position_heatmap.png'), dpi=300)
+            plt.close()
+            
+            # Plot 7: Error vs Time Heatmap - shows how tracking error evolves over time
+            plt.figure(figsize=(12, 6))
+            
+            # Get frame_numbers if available, otherwise use index
+            if 'frame_number' in error_df.columns:
+                frame_numbers = error_df.frame_number
+            else:
+                frame_numbers = error_df.index
+            
+            plt.scatter(frame_numbers, error_df.tracking_error_dist,
+                       c=error_df.tracking_error_dist, cmap='plasma', alpha=0.7)
+            
+            plt.axhline(y=dead_zone_size, color='g', linestyle='--', 
+                       label=f'Dead Zone ({dead_zone_size}px)')
+            
+            plt.title('Tracking Error Distance Over Time')
+            plt.xlabel('Frame')
+            plt.ylabel('Distance Error (pixels)')
+            plt.colorbar(label='Error (pixels)')
+            plt.grid(True)
+            plt.legend()
+            
+            plt.savefig(os.path.join(output_dir, 'tracking_error_vs_time.png'), dpi=300)
+            plt.close()
+        
         print("Visualizations generated successfully")
         
     except Exception as e:
@@ -367,23 +551,92 @@ def analyze_tracking_log(experiment_name=None, log_file=None):
                 f.write(f"Average pan speed: {avg_pan_speed:.2f} degrees/sec\n")
                 f.write(f"Average tilt speed: {avg_tilt_speed:.2f} degrees/sec\n\n")
         
-        if 'tracking_error_dist' in df.columns and 'target_detected' in df.columns and df[df.target_detected == True].shape[0] > 0:
+        if tracking_metrics_available and len(error_df) > 0:
+            f.write(f"\n=== Enhanced Tracking Metrics ===\n")
             f.write(f"Average tracking error: {avg_error:.2f} pixels\n")
             f.write(f"Maximum tracking error: {max_error:.2f} pixels\n")
             f.write(f"Standard deviation of error: {std_error:.2f} pixels\n")
+            f.write(f"Average X-axis error: {avg_error_x:.2f} pixels\n")
+            f.write(f"Average Y-axis error: {avg_error_y:.2f} pixels\n")
+            f.write(f"Maximum X-axis error: {max_error_x:.2f} pixels\n")
+            f.write(f"Maximum Y-axis error: {max_error_y:.2f} pixels\n\n")
+            
+            f.write(f"Tracking Accuracy:\n")
+            f.write(f"  Target within deadzone ({dead_zone_size} px): {frames_in_deadzone_pct:.1f}% of frames\n")
+            for threshold in accuracy_thresholds:
+                f.write(f"  Target within {threshold} px of center: {accuracy_stats[threshold]:.1f}% of frames\n")
+            
+            f.write("\nQuadrant Distribution:\n")
+            for quadrant, percentage in quadrant_counts.items():
+                f.write(f"  {quadrant}: {percentage:.1f}%\n")
     
     print(f"Analysis summary saved to {summary_file}")
     print("\nEvaluation complete!")
+
+def determine_quadrant(x_error, y_error):
+    """Determine which quadrant of the frame the target is in"""
+    if x_error > 0 and y_error < 0:
+        return "TOP-RIGHT"
+    elif x_error < 0 and y_error < 0:
+        return "TOP-LEFT"
+    elif x_error > 0 and y_error > 0:
+        return "BOTTOM-RIGHT"
+    elif x_error < 0 and y_error > 0:
+        return "BOTTOM-LEFT"
+    else:
+        return "CENTER"
 
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(description='Analyze tracking logs')
     parser.add_argument('--experiment', '-e', type=str, help='Experiment name (folder in logs directory)')
     parser.add_argument('--log', '-l', type=str, help='Direct path to log file (legacy format)')
+    parser.add_argument('--no-animation', action='store_true', help='Disable automatic animation generation')
     
     args = parser.parse_args()
     
+    # Run the analysis
     analyze_tracking_log(args.experiment, args.log)
+    
+    # Generate animation automatically unless disabled
+    if not args.no_animation:
+        print("\nGenerating tracking animation automatically...")
+        try:
+            # Import the tracking visualization module
+            # First add the parent directory to the path to ensure we can import the module
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from evals import tracking_visualization
+            
+            # Determine the experiment name
+            experiment_name = args.experiment
+            if not experiment_name:
+                experiment_name = find_latest_experiment()
+            
+            if experiment_name:
+                # Determine the output path for the animation
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                output_dir = os.path.join(base_dir, "logs", experiment_name, "analysis")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(output_dir, "tracking_animation.mp4")
+                
+                # Generate the animation
+                print(f"Creating animation for experiment: {experiment_name}")
+                print(f"Animation will be saved to: {output_path}")
+                
+                # Load tracking data
+                df, config = tracking_visualization.load_tracking_data(experiment_name)
+                
+                if df is not None:
+                    tracking_visualization.save_animation(df, output_path, config)
+                    print(f"Animation saved to {output_path}")
+                else:
+                    print("Failed to generate animation - could not load tracking data")
+            else:
+                print("No experiment found for animation")
+        except Exception as e:
+            print(f"Error generating animation: {e}")
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__":
     main()

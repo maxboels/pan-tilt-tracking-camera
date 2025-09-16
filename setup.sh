@@ -25,6 +25,10 @@ pip install --upgrade pip
 echo "Installing requirements..."
 pip install -r requirements.txt
 
+# Make scripts executable
+chmod +x evals/analyze_tracking_logs.py
+chmod +x evals/tracking_visualization.py
+
 # Download YOLO model if not present
 if [ ! -f "yolov8n.pt" ]; then
     echo "Downloading YOLOv8 nano model..."
@@ -47,4 +51,4 @@ echo ""
 echo "To test individual components:"
 echo "  python src/yolo_tracker.py  # Test YOLO tracking"
 echo "  python src/usb_camera.py    # Test camera"
-echo "
+echo ""
