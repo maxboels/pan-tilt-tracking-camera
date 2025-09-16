@@ -81,6 +81,7 @@ python main.py --no-record
 | `--no-record`, `-nr` | Disable video recording (enabled by default) |
 | `--mode`, `-m` | Tracking mode: 'surveillance' (keeps person in scene) or 'turret' (aims at center of bounding box) |
 | `--no-kalman`, `-nk` | Disable Kalman filtering (enabled by default) |
+| `--no-compensation`, `-nc` | Disable motion compensation for preventing feedback loops (enabled by default) |
 
 ### Examples
 
@@ -143,6 +144,22 @@ Kalman filtering is enabled by default. If needed, you can disable it with the `
 python main.py  # Kalman filtering is enabled by default
 python main.py --mode turret  # Precision targeting with Kalman filtering
 python main.py --no-kalman  # Disable Kalman filtering if needed
+```
+
+### Motion Compensation
+
+The system includes advanced motion compensation to prevent feedback loops that can cause drift:
+
+- Distinguishes between real target motion and apparent motion caused by camera movement
+- Prevents system instability when tracking stationary targets
+- Gradually builds confidence in stationary targets to further reduce drift
+- Compatible with both tracking modes and Kalman filtering
+
+Motion compensation is enabled by default. If needed, you can disable it with the `--no-compensation` flag:
+```bash
+python main.py  # Motion compensation is enabled by default
+python main.py --mode turret  # Precision targeting with motion compensation
+python main.py --no-compensation  # Disable motion compensation if needed
 ```
 
 ### Interactive Controls

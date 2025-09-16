@@ -33,13 +33,15 @@ class KalmanTracker:
         ], np.float32)
         
         # Set transition matrix - includes position and velocity components
+        # Add delta time (dt) factor to make the filter adapt to different frame rates
         # Each timestep: x' = x + dx/dt, y' = y + dy/dt
         # Velocity components remain constant (dx'/dt = dx/dt, dy'/dt = dy/dt)
+        dt = 0.033  # Assuming ~30fps
         self.kalman.transitionMatrix = np.array([
-            [1, 0, 1, 0],  # x position update: x' = x + dx/dt
-            [0, 1, 0, 1],  # y position update: y' = y + dy/dt
-            [0, 0, 1, 0],  # x velocity remains constant: dx'/dt = dx/dt
-            [0, 0, 0, 1]   # y velocity remains constant: dy'/dt = dy/dt
+            [1, 0, dt, 0],  # x position update: x' = x + dx*dt
+            [0, 1, 0, dt],  # y position update: y' = y + dy*dt
+            [0, 0, 1, 0],   # x velocity remains constant: dx'/dt = dx/dt
+            [0, 0, 0, 1]    # y velocity remains constant: dy'/dt = dy/dt
         ], np.float32)
         
         # Process noise - how much we expect the model to change
@@ -68,8 +70,14 @@ class KalmanTracker:
         Returns:
             Tuple (x, y) with filtered position estimate
         """
+        # Ensure measurement is valid and contains numeric values
+        if not isinstance(measurement, tuple) or len(measurement) != 2:
+            # Handle invalid measurement by returning the last prediction or None
+            print(f"Warning: Invalid measurement format: {measurement}")
+            return self.last_prediction if self.last_prediction else (0, 0)
+            
         # Convert to numpy array format for Kalman filter
-        measurement_array = np.array([[measurement[0]], [measurement[1]]], np.float32)
+        measurement_array = np.array([[float(measurement[0])], [float(measurement[1])]], np.float32)
         self.last_measurement = measurement
         
         if not self.initialized:
@@ -105,14 +113,14 @@ class KalmanTracker:
         Useful when object is temporarily occluded/not detected
         
         Returns:
-            Tuple (x, y) with predicted position, None if not initialized
+            Tuple (x, y) with predicted position, (0,0) if not initialized
         """
         if not self.initialized:
-            return None
+            return (0, 0)
         
         # Predict next state
         prediction = self.kalman.predict()
-        self.last_prediction = (prediction[0, 0], prediction[1, 0])
+        self.last_prediction = (float(prediction[0, 0]), float(prediction[1, 0]))
         self.frames_without_detection += 1
         
         # Return predicted position
@@ -153,9 +161,10 @@ def create_kalman_tracker(tracking_mode):
         # Turret mode - prioritize accuracy and responsiveness
         # Lower process noise = more trust in model predictions
         # Lower measurement noise = more trust in measurements
-        return KalmanTracker(process_noise=0.01, measurement_noise=0.05)
+        # For stationary targets, we want to reduce hunting/drifting:
+        return KalmanTracker(process_noise=0.005, measurement_noise=0.03)
     else:
         # Surveillance mode - prioritize smooth movement
         # Higher process noise = less trust in model predictions
         # Higher measurement noise = less trust in measurements (smooth out jitter)
-        return KalmanTracker(process_noise=0.03, measurement_noise=0.15)
+        return KalmanTracker(process_noise=0.01, measurement_noise=0.12)

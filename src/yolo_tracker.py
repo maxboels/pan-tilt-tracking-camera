@@ -174,8 +174,8 @@ class YOLOTracker:
             if self.use_kalman and self.kalman_tracker:
                 # Update Kalman filter with new measurement
                 filtered_pos = self.kalman_tracker.update(current_target.center)
-                # Store filtered position in history
-                self.target_history.append(filtered_pos)
+                # Store filtered position in history (make sure values are integers)
+                self.target_history.append((int(filtered_pos[0]), int(filtered_pos[1])))
             else:
                 # Standard tracking - store actual position
                 self.target_history.append(current_target.center)
@@ -190,7 +190,8 @@ class YOLOTracker:
                 # But only for a limited number of frames to avoid drifting
                 if len(self.target_history) > 0 and self.kalman_tracker.frames_without_detection < 10:
                     predicted_pos = self.kalman_tracker.predict()
-                    self.target_history.append(predicted_pos)
+                    # Ensure predicted position is stored as integers
+                    self.target_history.append((int(predicted_pos[0]), int(predicted_pos[1])))
                     if len(self.target_history) > self.max_history:
                         self.target_history.pop(0)
                 else:
@@ -220,7 +221,9 @@ class YOLOTracker:
             # For Kalman, we can just use the most recent filtered position
             # (which already accounts for velocity and acceleration)
             if self.target_history:
-                return self.target_history[-1]
+                # Ensure we return integers for OpenCV drawing functions
+                pos = self.target_history[-1]
+                return (int(pos[0]), int(pos[1]))
             return None
             
         # Otherwise use weighted average smoothing method
@@ -267,23 +270,26 @@ class YOLOTracker:
         # Draw current tracking target with gentle highlight
         if self.current_target:
             smoothed_pos = self.get_smoothed_target_position()
-            if smoothed_pos:
+            if smoothed_pos and isinstance(smoothed_pos, tuple) and len(smoothed_pos) == 2:
+                # Ensure we have integer coordinates for OpenCV drawing functions
+                x, y = int(smoothed_pos[0]), int(smoothed_pos[1])
+                
                 # Fuschia/pink color (255, 0, 255) instead of red (0, 0, 255)
-                cv2.circle(result_frame, smoothed_pos, 10, (255, 0, 255), 2)
+                cv2.circle(result_frame, (x, y), 10, (255, 0, 255), 2)
                 
                 # Draw tracking indicator with gentler fuschia/pink color
                 cv2.line(result_frame, 
-                       (smoothed_pos[0] - 15, smoothed_pos[1]), 
-                       (smoothed_pos[0] + 15, smoothed_pos[1]), 
+                       (x - 15, y), 
+                       (x + 15, y), 
                        (255, 0, 255), 2)
                 cv2.line(result_frame, 
-                       (smoothed_pos[0], smoothed_pos[1] - 15), 
-                       (smoothed_pos[0], smoothed_pos[1] + 15), 
+                       (x, y - 15), 
+                       (x, y + 15), 
                        (255, 0, 255), 2)
                 
                 # Label as person tracking with gentler color
                 cv2.putText(result_frame, "PERSON TRACKING", 
-                          (smoothed_pos[0] + 20, smoothed_pos[1] + 20), 
+                          (x + 20, y + 20), 
                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
         
         return result_frame

@@ -13,6 +13,7 @@ from src.servo_controller import ArduinoServoController
 from src.calibration import CameraServoCalibrator
 from src.yolo_tracker import YOLOTracker
 from src.tracking_logger import TrackingLogger
+from src.motion_compensator import MotionCompensator
 import numpy as np
 import cv2
 import time
@@ -119,6 +120,13 @@ class PanTiltYOLOTracker:
         self.control_thread = None
         self.target_position = None
         self.tracking_enabled = config.get('tracking_enabled', True)
+        
+        # Motion compensator to prevent feedback loops
+        self.motion_compensator = MotionCompensator(stabilization_factor=0.8)
+        self.motion_compensator.calibrate(
+            frame_width=camera_config.get('resolution', [1920, 1080])[0],
+            frame_height=camera_config.get('resolution', [1920, 1080])[1]
+        )
         
         # Performance tracking
         self.fps_counter = deque(maxlen=30)
@@ -362,6 +370,10 @@ class PanTiltYOLOTracker:
                     if abs(pan_diff) > 0.5 or abs(tilt_diff) > 0.5:
                         self.servo_controller.move_servos(new_pan, new_tilt)
                         
+                        # Update motion compensator with servo movement if enabled
+                        if self.config.get('use_motion_compensation', True):
+                            self.motion_compensator.update_servo_movement(pan_diff, tilt_diff)
+                        
                         # Log servo command with detailed information
                         self.tracking_logger.log_servo_command(
                             pan_angle=new_pan,
@@ -397,10 +409,16 @@ class PanTiltYOLOTracker:
         if current_target:
             smoothed_pos = self.yolo_tracker.get_smoothed_target_position()
             if smoothed_pos:
+                # Apply motion compensation to prevent feedback loops if enabled
+                if self.config.get('use_motion_compensation', True):
+                    compensated_pos = self.motion_compensator.compensate(smoothed_pos)
+                else:
+                    compensated_pos = smoothed_pos
+                
                 # Check dead zone
-                pan_error, tilt_error = self.calculate_pan_tilt_error(smoothed_pos)
+                pan_error, tilt_error = self.calculate_pan_tilt_error(compensated_pos)
                 if abs(pan_error) > self.dead_zone or abs(tilt_error) > self.dead_zone:
-                    self.target_position = smoothed_pos
+                    self.target_position = compensated_pos
                 else:
                     # Person is in dead zone - stop tracking to avoid jitter
                     self.target_position = None
@@ -574,6 +592,7 @@ class PanTiltYOLOTracker:
                 elif key == ord('r'):
                     self.yolo_tracker.reset_tracking()
                     self.target_position = None
+                    self.motion_compensator.reset()
                     print("Tracking reset")
                 elif key == ord('t'):
                     self.tracking_enabled = not self.tracking_enabled
@@ -646,6 +665,8 @@ def main():
                        help='Tracking mode: surveillance (keeps person in scene) or turret (aims at center of bounding box)')
     parser.add_argument('--no-kalman', '-nk', action='store_true',
                        help='Disable Kalman filtering (enabled by default)')
+    parser.add_argument('--no-compensation', '-nc', action='store_true',
+                       help='Disable motion compensation (enabled by default)')
     
     args = parser.parse_args()
     
@@ -670,6 +691,7 @@ def main():
     config['record_video'] = not args.no_record  # Recording enabled by default
     config['tracking_mode'] = args.mode
     config['use_kalman'] = not args.no_kalman  # Kalman enabled by default
+    config['use_motion_compensation'] = not args.no_compensation  # Motion compensation enabled by default
     
     # Create and run tracker
     tracker = PanTiltYOLOTracker(config)
