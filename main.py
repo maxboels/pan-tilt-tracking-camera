@@ -97,7 +97,8 @@ class PanTiltYOLOTracker:
         tracking_config = config.get('tracking', {})
         self.yolo_tracker = YOLOTracker(
             model_path=tracking_config.get('model_path', 'yolov8n.pt'),
-            confidence_threshold=tracking_config.get('confidence_threshold', 0.5)
+            confidence_threshold=tracking_config.get('confidence_threshold', 0.5),
+            tracking_mode=config.get('tracking_mode', 'surveillance')
         )
         
         # Calibration setup
@@ -640,6 +641,8 @@ def main():
                        help='Start with tracking disabled (can be toggled with "t" key)')
     parser.add_argument('--record', '-r', action='store_true',
                        help='Record video of tracking session')
+    parser.add_argument('--mode', '-m', choices=['surveillance', 'turret'], default='surveillance',
+                       help='Tracking mode: surveillance (keeps person in scene) or turret (aims at center of bounding box)')
     
     args = parser.parse_args()
     
@@ -660,8 +663,9 @@ def main():
     # Add tracking state flag
     config['tracking_enabled'] = not args.no_tracking
     
-    # Add recording flag
+    # Add recording flag and tracking mode
     config['record_video'] = args.record
+    config['tracking_mode'] = args.mode
     
     # Create and run tracker
     tracker = PanTiltYOLOTracker(config)

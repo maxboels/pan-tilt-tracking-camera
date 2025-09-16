@@ -42,7 +42,8 @@ class DetectedObject:
 class YOLOTracker:
     """YOLOv8-based object detector and tracker"""
     
-    def __init__(self, model_path: str = "yolov8n.pt", confidence_threshold: float = 0.5, track_head: bool = False):
+    def __init__(self, model_path: str = "yolov8n.pt", confidence_threshold: float = 0.5, 
+                 track_head: bool = False, tracking_mode: str = "surveillance"):
         """Initialize YOLOv8 detector"""
         print(f"Loading YOLO model: {model_path}")
         try:
@@ -66,11 +67,19 @@ class YOLOTracker:
         
         self.confidence_threshold = confidence_threshold
         self.track_head = track_head
+        self.tracking_mode = tracking_mode
         
-        # Tracking parameters
+        # Tracking parameters - adjusted based on tracking mode
         self.current_target = None
         self.target_history = []
-        self.max_history = 10  # Maximum history for smoothing
+        
+        # Choose history size based on tracking mode
+        if self.tracking_mode == "turret":
+            self.max_history = 3  # Smaller history for precise turret targeting
+            print("Using TURRET tracking mode (aims directly at target center)")
+        else:
+            self.max_history = 10  # Larger history for smooth surveillance movement
+            print("Using SURVEILLANCE tracking mode (keeps person in scene)")
         
         # Object ID to track (if multiple people are detected)
         self.tracked_id = None
@@ -167,8 +176,19 @@ class YOLOTracker:
         if not self.target_history:
             return None
         
-        # Use weighted average of recent positions
-        weights = np.linspace(0.5, 1.0, len(self.target_history))
+        # Adjust weights based on tracking mode
+        if self.tracking_mode == "turret":
+            # For turret mode: aim precisely at the target center
+            # Use steeper weighting that heavily favors recent positions
+            weights = np.linspace(0.1, 1.0, len(self.target_history))
+            # Apply exponential weighting for even more accurate targeting
+            weights = weights ** 2
+        else:
+            # For surveillance mode: keep the target in frame with smoother movement
+            # Use gentler weighting for more stable, less jerky motion
+            weights = np.linspace(0.5, 1.0, len(self.target_history))
+        
+        # Normalize weights
         weights = weights / weights.sum()
         
         x_coords = [pos[0] for pos in self.target_history]

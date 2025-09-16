@@ -79,12 +79,19 @@ python main.py --record
 | `--eval` | Automatically run evaluation when quitting |
 | `--no-tracking`, `-n` | Start with tracking disabled (servos won't move) |
 | `--record`, `-r` | Record video of the tracking session |
+| `--mode`, `-m` | Tracking mode: 'surveillance' (keeps person in scene) or 'turret' (aims at center of bounding box) |
 
 ### Examples
 
 ```bash
-# Record video while tracking
+# Record video while tracking (default surveillance mode)
 python main.py --record
+
+# Run in turret mode (precise targeting)
+python main.py --mode turret
+
+# Run in surveillance mode (explicit, smoother tracking)
+python main.py --mode surveillance
 
 # Record video with a specific experiment name (for organization)
 python main.py --record --experiment tracking_demo_1
@@ -92,8 +99,30 @@ python main.py --record --experiment tracking_demo_1
 # Record without tracking (useful for creating test footage)
 python main.py --record --no-tracking
 
-# Record, track, and run evaluation when finished
-python main.py --record --eval
+# Record, track in turret mode, and run evaluation when finished
+python main.py --record --mode turret --eval
+```
+
+### Tracking Modes
+
+The system supports two distinct tracking modes optimized for different use cases:
+
+1. **Surveillance Mode** (Default): 
+   - Designed to keep the person in the scene with stable, smooth camera movements
+   - Uses a longer history buffer (10 positions) for position smoothing
+   - Gradual weight distribution provides stable tracking with minimal jitter
+   - Best for general surveillance and monitoring applications
+
+2. **Turret Mode**:
+   - Designed for precise targeting at the center of the detected bounding box
+   - Uses a shorter history buffer (3 positions) for more immediate response
+   - Applies exponential weighting to heavily favor recent positions
+   - Best for applications requiring precise aiming like laser pointer tracking
+
+Switch between modes using the `--mode` command line argument:
+```bash
+python main.py --mode surveillance  # Default mode
+python main.py --mode turret        # Precision targeting mode
 ```
 
 ### Interactive Controls
