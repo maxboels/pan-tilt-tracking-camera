@@ -78,7 +78,7 @@ def main():
             update_calibration_code(calibration_file)
             print("\nTo verify the fix:")
             print("1. Run the tracking simulation test again:")
-            print("   python examples/test_tracking_simulation.py")
+            print("   python evals/test_tracking_simulation.py")
             print("2. Check that pan movements are now correct")
         else:
             print("❌ Could not find calibration.py file")

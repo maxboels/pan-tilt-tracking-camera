@@ -194,11 +194,11 @@ class CameraServoCalibrator:
         pan_angle = pan_error * pan_scale * pan_multiplier
         tilt_angle = -tilt_error * tilt_scale * tilt_multiplier
         
-        print(f"EMERGENCY FIX ACTIVE: Object in {quadrant}, pixel error: ({pan_error}, {tilt_error})")
-        print(f"EMERGENCY FIX: Calculated angles: Pan={pan_angle:.1f}°, Tilt={tilt_angle:.1f}°")
-        print(f"EMERGENCY FIX: Expected camera movement: " + 
-              f"Pan={'RIGHT' if (pan_error > 0) == (pan_multiplier > 0) else 'LEFT'}, " +
-              f"Tilt={'DOWN' if (tilt_error > 0) == (tilt_multiplier > 0) else 'UP'}")
+        # print(f"EMERGENCY FIX ACTIVE: Object in {quadrant}, pixel error: ({pan_error}, {tilt_error})")
+        # print(f"EMERGENCY FIX: Calculated angles: Pan={pan_angle:.1f}°, Tilt={tilt_angle:.1f}°")
+        # print(f"EMERGENCY FIX: Expected camera movement: " + 
+            #   f"Pan={'RIGHT' if (pan_error > 0) == (pan_multiplier > 0) else 'LEFT'}, " +
+            #   f"Tilt={'DOWN' if (tilt_error > 0) == (tilt_multiplier > 0) else 'UP'}")
         
         return pan_angle, tilt_angle
     

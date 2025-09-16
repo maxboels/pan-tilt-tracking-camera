@@ -6,3 +6,9 @@ venv/
 env/
 *=*
 tracking_performance_*.csv
+logs/experiment_*/*.json
+logs/experiment_*/tracking_data.log
+
+
+src/*.cpython-312.pyc
+src/__pycache__/*.cpython-312.pyc
