@@ -122,7 +122,7 @@ class PanTiltYOLOTracker:
         self.tracking_enabled = config.get('tracking_enabled', True)
         
         # Motion compensator to prevent feedback loops
-        self.motion_compensator = MotionCompensator(stabilization_factor=0.8)
+        self.motion_compensator = MotionCompensator(stabilization_factor=0.8, debug=self.config.verbose)
         self.motion_compensator.calibrate(
             frame_width=camera_config.get('resolution', [1920, 1080])[0],
             frame_height=camera_config.get('resolution', [1920, 1080])[1]
