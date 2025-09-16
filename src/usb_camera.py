@@ -12,7 +12,7 @@ import queue
 class USBCamera:
     """USB Camera interface with thread-safe frame capture"""
     
-    def __init__(self, camera_index=0, resolution=(1920, 1080), fps=30):
+    def __init__(self, camera_index=0, resolution=(1280, 720), fps=30, use_mjpg=True):
         """
         Initialize USB camera interface
         
@@ -20,12 +20,14 @@ class USBCamera:
             camera_index: Camera device index
             resolution: Desired camera resolution
             fps: Target frames per second
+            use_mjpg: Use MJPG format for better performance (default True)
         """
         self.camera_index = camera_index
         self.resolution = resolution
         self.width = resolution[0]  # Add explicit width attribute
         self.height = resolution[1] # Add explicit height attribute
         self.fps = fps
+        self.use_mjpg = use_mjpg
         
         # OpenCV capture object
         self.cap = None
@@ -39,6 +41,10 @@ class USBCamera:
         self.frame_count = 0
         self.start_time = None
         self.current_fps = 0
+        
+        # Buffer for FPS smoothing
+        self.fps_history = []
+        self.max_fps_history = 10
     
     def open(self):
         """Open camera and initialize capture"""
@@ -53,6 +59,13 @@ class USBCamera:
             if not self.cap.isOpened():
                 print(f"Failed to open camera {self.camera_index}")
                 return False
+                
+            # Set MJPG format for more efficient capture - this dramatically improves performance
+            if self.use_mjpg:
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+            
+            # Set buffer size to minimize latency
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             
             # Set resolution
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
@@ -65,6 +78,9 @@ class USBCamera:
             self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
+            fourcc = self.cap.get(cv2.CAP_PROP_FOURCC)
+            fourcc_str = ''.join([chr((int(fourcc) >> 8 * i) & 0xFF) for i in range(4)])
+            print(f"  Format: {fourcc_str}")
             
             # Verify camera is working by reading a test frame
             ret, test_frame = self.cap.read()
@@ -127,8 +143,16 @@ class USBCamera:
             # Update frame counter and FPS
             self.frame_count += 1
             elapsed = time.time() - self.start_time
-            if elapsed > 1.0:  # Update FPS every second
-                self.current_fps = self.frame_count / elapsed
+            if elapsed > 0.5:  # Update FPS more frequently
+                current_fps = self.frame_count / elapsed
+                self.fps_history.append(current_fps)
+                
+                # Keep history at max length
+                if len(self.fps_history) > self.max_fps_history:
+                    self.fps_history.pop(0)
+                
+                # Calculate smoothed FPS
+                self.current_fps = sum(self.fps_history) / len(self.fps_history)
                 self.frame_count = 0
                 self.start_time = time.time()
             

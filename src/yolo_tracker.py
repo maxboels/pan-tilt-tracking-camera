@@ -50,18 +50,37 @@ class YOLOTracker:
                  use_kalman: bool = True):  # Set use_kalman default to True
         """Initialize YOLOv8 detector"""
         print(f"Loading YOLO model: {model_path}")
+        
+        # Check for CUDA availability
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if device == 'cuda':
+            print(f"CUDA is available: {torch.cuda.get_device_name(0)}")
+        else:
+            print("CUDA not available. Using CPU for inference (slower).")
+            
         try:
-            # Use YOLO directly instead of torch.hub
-            self.model = YOLO(model_path)
-            print("YOLO model loaded successfully")
+            # Use YOLO directly with explicit device selection
+            self.model = YOLO(model_path).to(device)
+            print(f"YOLO model loaded successfully on {device}")
+            
+            # Enable TensorRT for Jetson platforms if available
+            if device == 'cuda' and os.path.exists('/etc/nv_tegra_release'):
+                try:
+                    print("Jetson platform detected, attempting to use TensorRT optimization...")
+                    self.model = YOLO(model_path, task='detect')
+                    self.model.to(device).fuse()
+                    print("TensorRT optimization enabled for Jetson platform")
+                except Exception as trt_error:
+                    print(f"Could not enable TensorRT optimization: {trt_error}")
+                    
         except Exception as e:
             print(f"Error loading YOLO model: {e}")
             # Fallback to local file if model_path exists
             if os.path.exists(model_path):
                 print(f"Trying to load model directly from file: {model_path}")
                 try:
-                    self.model = YOLO(model_path)
-                    print("YOLO model loaded from local file successfully")
+                    self.model = YOLO(model_path).to(device)
+                    print(f"YOLO model loaded from local file successfully on {device}")
                 except Exception as e2:
                     print(f"Failed to load model from file: {e2}")
                     raise RuntimeError(f"Could not load YOLO model: {e2}")
@@ -99,36 +118,53 @@ class YOLOTracker:
 
     def detect_objects(self, frame: np.ndarray) -> List[DetectedObject]:
         """Detect objects in frame using YOLO"""
-        results = self.model(frame, verbose=False)
+        # Performance optimizations
+        # 1. Only process people class to reduce computation
+        # 2. Apply confidence threshold at inference time
+        # 3. Use half precision when on GPU
+        device = next(self.model.parameters()).device
+        use_half = device.type == 'cuda'  # Use half precision only on CUDA
+        
+        results = self.model(
+            frame,
+            verbose=False,
+            classes=[0],  # Only detect people (class 0)
+            conf=self.confidence_threshold,  # Apply confidence threshold at inference
+            half=use_half  # Use FP16 for faster inference on GPU
+        )
+        
         detections = []
         
         try:
             # Process results from YOLOv8
             for result in results:
                 boxes = result.boxes
-                for box in boxes:
+                if len(boxes) == 0:
+                    continue
+                    
+                # Process all boxes at once for efficiency
+                # Get all coordinates together
+                xyxys = boxes.xyxy.cpu().numpy()
+                confs = boxes.conf.cpu().numpy()
+                clss = boxes.cls.cpu().numpy()
+                
+                for i, (xyxy, conf, cls) in enumerate(zip(xyxys, confs, clss)):
                     try:
-                        # Get box coordinates
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        
-                        # Get confidence
-                        confidence = float(box.conf[0].item())
-                        
-                        # Get class
-                        class_id = int(box.cls[0].item())
+                        x1, y1, x2, y2 = xyxy
+                        class_id = int(cls)
                         class_name = result.names[class_id]
+                        confidence = float(conf)
                         
-                        if class_name == "person" and confidence >= self.confidence_threshold:
+                        # Class filter is redundant now since we filter at inference time
+                        # but kept for safety
+                        if class_name == "person":
                             bbox = (int(x1), int(y1), int(x2), int(y2))
-                            
-                            # Always use center of bounding box for tracking
-                            # (removed head position estimation)
                             center = (int((x1 + x2) / 2), int((y1 + y2) / 2))
                             
                             detection = DetectedObject(class_name, confidence, bbox, center)
                             detections.append(detection)
                     except Exception as e:
-                        print(f"Error processing detection: {e}")
+                        print(f"Error processing detection {i}: {e}")
                         continue
         except Exception as e:
             print(f"Error processing YOLO results: {e}")

@@ -80,10 +80,16 @@ class PanTiltYOLOTracker:
         
         # Camera setup
         camera_config = config.get('camera', {})
+        
+        # Use lower resolution for better performance
+        # 720p is a good compromise between quality and performance
+        default_resolution = [1280, 720]
+        
         self.camera = USBCamera(
             camera_index=camera_config.get('index', 0),
-            resolution=tuple(camera_config.get('resolution', [1920, 1080])),
-            fps=camera_config.get('fps', 30)
+            resolution=tuple(camera_config.get('resolution', default_resolution)),
+            fps=camera_config.get('fps', 30),
+            use_mjpg=camera_config.get('use_mjpg', True)  # Use MJPG for better performance
         )
         
         # Servo controller setup
@@ -402,8 +408,35 @@ class PanTiltYOLOTracker:
         """Process frame for tracking and visualization"""
         start_time = time.time()
         
+        # Skip frames if we're falling behind (processing takes too long)
+        if len(self.fps_counter) > 5:
+            avg_processing_time = sum(self.fps_counter) / len(self.fps_counter)
+            target_frame_time = 1.0 / self.camera.fps
+            
+            # If we're taking more than 90% of frame time to process,
+            # consider downscaling the frame for faster processing
+            if avg_processing_time > (target_frame_time * 0.9) and frame.shape[0] > 480:
+                # Downscale by 2x for processing
+                process_frame = cv2.resize(frame, (frame.shape[1]//2, frame.shape[0]//2))
+                scale_factor = 2.0
+            else:
+                process_frame = frame
+                scale_factor = 1.0
+        else:
+            process_frame = frame
+            scale_factor = 1.0
+        
         # Run YOLO detection
-        detections = self.yolo_tracker.detect_objects(frame)
+        detections = self.yolo_tracker.detect_objects(process_frame)
+        
+        # Scale detection coordinates back to original frame size if needed
+        if scale_factor != 1.0:
+            for det in detections:
+                x1, y1, x2, y2 = det.bbox
+                det.bbox = (int(x1*scale_factor), int(y1*scale_factor), 
+                            int(x2*scale_factor), int(y2*scale_factor))
+                det.center = (int(det.center[0]*scale_factor), int(det.center[1]*scale_factor))
+                det.area = int(det.area * scale_factor * scale_factor)
         
         # Update tracking
         current_target = self.yolo_tracker.update_tracking(detections)

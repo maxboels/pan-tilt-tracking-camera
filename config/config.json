@@ -2,10 +2,11 @@
   "camera": {
     "index": 0,
     "resolution": [
-      1920,
-      1080
+      1280,
+      720
     ],
-    "fps": 30
+    "fps": 30,
+    "use_mjpg": true
   },
   "servo": {
     "port": "/dev/ttyACM0",
@@ -33,5 +34,11 @@
       1280,
       720
     ]
+  },
+  "performance": {
+    "use_gpu": true,
+    "optimize_for_jetson": true,
+    "use_motion_compensation": true,
+    "adaptive_processing": true
   }
 }

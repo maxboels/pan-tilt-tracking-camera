@@ -56,9 +56,9 @@ class MotionCompensator:
         self.tracking_duration = 0        # Number of frames spent tracking the same target
         self.max_tracking_duration = 90   # Maximum tracking duration (3 seconds at 30 fps)
         
-        # Position history for trend analysis
+        # Position history for trend analysis - reduced for better performance
         self.position_history = []
-        self.max_history_size = 30        # 1 second at 30 fps
+        self.max_history_size = 15        # 0.5 seconds at 30 fps - reduced for performance
         
     def calibrate(self, frame_width, frame_height, fov_horizontal=103, fov_vertical=None):
         """
@@ -255,6 +255,7 @@ class MotionCompensator:
     def _calculate_position_variance(self):
         """
         Calculate the variance of recent position samples to detect target movement
+        Optimized version that uses NumPy for faster computation
         
         Returns:
             float: Variance score of recent positions (higher = more movement)
@@ -263,23 +264,37 @@ class MotionCompensator:
         if len(self.position_history) < 3:
             return 0.0
             
-        # Take the last few positions (at most max_history_size)
-        positions = self.position_history[-min(len(self.position_history), self.max_history_size):]
+        # Use fewer positions for performance (last 10 is sufficient)
+        num_positions = min(10, len(self.position_history))
+        positions = self.position_history[-num_positions:]
         
-        # Calculate variance on x and y separately
-        x_values = [pos[0] for pos in positions]
-        y_values = [pos[1] for pos in positions]
-        
-        # Calculate average position
-        avg_x = sum(x_values) / len(x_values)
-        avg_y = sum(y_values) / len(y_values)
-        
-        # Calculate variance
-        x_variance = sum((x - avg_x)**2 for x in x_values) / len(x_values)
-        y_variance = sum((y - avg_y)**2 for y in y_values) / len(y_values)
-        
-        # Combined variance score (sqrt of sum of variances)
-        return np.sqrt(x_variance + y_variance)
+        # Convert to numpy array for faster computation
+        try:
+            # Fast path with numpy
+            pos_array = np.array(positions)
+            x_values = pos_array[:, 0]
+            y_values = pos_array[:, 1]
+            
+            # Calculate variance
+            x_variance = np.var(x_values)
+            y_variance = np.var(y_values)
+            
+            # Combined variance score (sqrt of sum of variances)
+            return np.sqrt(x_variance + y_variance)
+        except:
+            # Fall back to slower Python implementation
+            x_values = [pos[0] for pos in positions]
+            y_values = [pos[1] for pos in positions]
+            
+            # Calculate average position
+            avg_x = sum(x_values) / len(x_values)
+            avg_y = sum(y_values) / len(y_values)
+            
+            # Calculate variance
+            x_variance = sum((x - avg_x)**2 for x in x_values) / len(x_values)
+            y_variance = sum((y - avg_y)**2 for y in y_values) / len(y_values)
+            
+            return np.sqrt(x_variance + y_variance)
         
     def _calculate_motion_match(self, observed_delta, expected_delta):
         """
