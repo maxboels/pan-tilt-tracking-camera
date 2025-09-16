@@ -122,10 +122,13 @@ class PanTiltYOLOTracker:
         self.tracking_enabled = config.get('tracking_enabled', True)
         
         # Motion compensator to prevent feedback loops
-        self.motion_compensator = MotionCompensator(stabilization_factor=0.8, debug=self.config.verbose)
+        # Initialize motion compensator
+        self.motion_compensator = MotionCompensator(stabilization_factor=0.8, debug=self.config.get('verbose', False))
         self.motion_compensator.calibrate(
             frame_width=camera_config.get('resolution', [1920, 1080])[0],
-            frame_height=camera_config.get('resolution', [1920, 1080])[1]
+            frame_height=camera_config.get('resolution', [1920, 1080])[1],
+            fov_horizontal=camera_config.get('fov_horizontal', 103),  # 103° for our camera
+            fov_vertical=camera_config.get('fov_vertical', None)      # Will be calculated from aspect ratio
         )
         
         # Performance tracking

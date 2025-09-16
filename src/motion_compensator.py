@@ -23,7 +23,9 @@ class MotionCompensator:
                                  Lower values make the system more responsive to actual movement
             debug: Enable debug output
         """
-        self.debug = debug
+        # Store configuration parameters
+        self.debug = bool(debug)  # Ensure it's a boolean value
+        self.stabilization_factor = stabilization_factor
         self.stabilization_factor = stabilization_factor
         
         # Store previous positions and movements
@@ -87,7 +89,8 @@ class MotionCompensator:
         self.tilt_to_pixel_factor = frame_height / fov_vertical
         
         # Print calibration info if debug is enabled
-        if hasattr(self, 'debug') and self.debug:
+        debug_enabled = getattr(self, 'debug', False)
+        if debug_enabled:
             print(f"Motion Compensator Calibration:")
             print(f"  Camera FOV: {fov_horizontal}° horizontal, {fov_vertical:.1f}° vertical")
             print(f"  Frame size: {frame_width}x{frame_height} pixels")
@@ -238,7 +241,8 @@ class MotionCompensator:
         self.position_history.append((compensated_x, compensated_y))
         
         # Print debug information
-        if self.debug and (self.tracking_duration % 10 == 0 or self.stationary_confidence > 0.8):
+        debug_enabled = getattr(self, 'debug', False)
+        if debug_enabled and (self.tracking_duration % 10 == 0 or self.stationary_confidence > 0.8):
             position_variance = self._calculate_position_variance()
             print(f"Motion Comp: conf={self.stationary_confidence:.2f}, frames={self.stationary_frames}")
             print(f"  Deadband={adaptive_deadband:.1f}, Variance={position_variance:.2f}")
