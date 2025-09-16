@@ -66,11 +66,9 @@ class CameraServoCalibrator:
             if 'distortion_coeffs' in data:
                 self.distortion_coeffs = np.array(data['distortion_coeffs'])
                 
-            print(f"Loaded calibration data with {len(self.calibration_points)} points")
             return True
             
         except FileNotFoundError:
-            print("No existing calibration file found")
             return False
         except Exception as e:
             print(f"Error loading calibration: {e}")
@@ -116,7 +114,6 @@ class CameraServoCalibrator:
             self.transformation_matrix = cv2.getPerspectiveTransform(
                 pixel_coords[:4], servo_coords[:4]
             )
-            print("Perspective transformation matrix calculated")
         
         # Calculate homography for more robust transformation
         if len(self.calibration_points) >= 4:
@@ -127,7 +124,6 @@ class CameraServoCalibrator:
             
             if homography is not None:
                 self.transformation_matrix = homography
-                print("Homography transformation calculated")
                 return True
         
         return False

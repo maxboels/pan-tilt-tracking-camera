@@ -144,12 +144,11 @@ class PanTiltYOLOTracker:
         if not self.servo_controller.connect():
             print("Warning: Failed to connect to servo controller (running in simulation mode)")
         else:
-            # Apply error_to_angle_ratio from config if provided
+            # Apply servo config overrides if provided
             servo_config = self.config.get('servo', {})
             if 'error_to_angle_ratio' in servo_config:
-                self.servo_controller.error_to_angle_ratio = servo_config.get('error_to_angle_ratio')
-                print(f"Applied custom error_to_angle_ratio: {self.servo_controller.error_to_angle_ratio}")
-            
+                if hasattr(self.servo_controller, 'error_to_angle_ratio'):
+                    self.servo_controller.error_to_angle_ratio = servo_config['error_to_angle_ratio']
             # Center servos at startup
             self.servo_controller.center_servos()
             time.sleep(1)
@@ -175,7 +174,7 @@ class PanTiltYOLOTracker:
         cv2.destroyAllWindows()
         
         # Run evaluation if enabled
-        if self.run_eval and self.config.get('experiment_name'):
+        if self.run_eval:
             print("Running evaluation automatically...")
             import subprocess
             import os
@@ -188,10 +187,30 @@ class PanTiltYOLOTracker:
             
             # Run the analysis script
             if os.path.exists(analysis_script):
-                cmd = [sys.executable, analysis_script, '--experiment', self.config['experiment_name']]
-                subprocess.run(cmd)
+                experiment_name = self.config.get('experiment_name')
+                if experiment_name:
+                    print(f"Executing: {sys.executable} {analysis_script} --experiment {experiment_name}")
+                    try:
+                        # Use subprocess.run with check=True to raise exceptions if the command fails
+                        result = subprocess.run(
+                            [sys.executable, analysis_script, '--experiment', experiment_name],
+                            check=True
+                        )
+                        print(f"Evaluation completed with return code: {result.returncode}")
+                    except subprocess.CalledProcessError as e:
+                        print(f"Error running evaluation: {e}")
+                else:
+                    print("No experiment name specified. Using most recent experiment.")
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, analysis_script],
+                            check=True
+                        )
+                        print(f"Evaluation completed with return code: {result.returncode}")
+                    except subprocess.CalledProcessError as e:
+                        print(f"Error running evaluation: {e}")
             else:
-                print("Warning: Could not find analysis script in evals directory")
+                print(f"Error: Analysis script not found at {analysis_script}")
         
         print("System stopped")
     

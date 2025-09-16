@@ -9,6 +9,19 @@ import time
 import threading
 from collections import deque
 
+def calculate_pan_command(self, pan_error):
+        """Convert pan error to servo angle adjustment"""
+        
+        # Apply deadzone - don't move if error is small
+        if abs(pan_error) < self.deadzone_pixels:
+            return 0.0
+        
+        # Convert pixel error to angle adjustment
+        angle_adjustment = pan_error * self.error_to_angle_ratio
+        
+        # Limit movement speed
+        angle_adjustment = max(-self.max_speed, min(self.max_speed, angle_adjustment))
+
 class ArduinoServoController:
     def __init__(self, port='/dev/ttyUSB0', baudrate=115200, pan_channel=0, tilt_channel=1, inverted_pan=True):
         """
@@ -67,7 +80,6 @@ class ArduinoServoController:
         
         for port in possible_ports:
             try:
-                print(f"Trying to connect to {port}...")
                 self.serial_connection = serial.Serial(
                     port, 
                     self.baudrate, 
@@ -84,14 +96,11 @@ class ArduinoServoController:
                     self.connected = True
                     self.port = port  # Update port to the one that worked
                     print(f"Arduino servo controller connected on {port}")
-                    print(f"Arduino response: {response}")
                     return True
                 else:
-                    print(f"No valid response from {port}. Response: {response}")
                     self.serial_connection.close()
                     
             except Exception as e:
-                print(f"Failed to connect to {port}: {e}")
                 if self.serial_connection:
                     try:
                         self.serial_connection.close()
@@ -122,41 +131,24 @@ class ArduinoServoController:
             response = self.serial_connection.readline().decode().strip()
             return "OK" in response
         except Exception as e:
-            print(f"Error sending command '{command}': {e}")
             return False
     
     def move_servo(self, channel, angle):
         """Move servo to specific angle"""
         # Apply calibration adjustments
         if channel == self.pan_channel:
-            print(f"SERVO: Direction multiplier for pan is {self.pan_direction} (inverted_pan={self.pan_direction==-1})")
             # Apply direction and offset corrections
             calibrated_angle = (angle * self.pan_direction) + self.pan_offset
             calibrated_angle = max(self.pan_min, min(self.pan_max, calibrated_angle))
-            print(f"Pan servo: requested={angle:.1f}°, calibrated={calibrated_angle:.1f}°")
-            # Log the expected physical movement direction
-            if angle > 0:
-                expected_movement = "RIGHT" if self.pan_direction > 0 else "LEFT"
-            else:
-                expected_movement = "LEFT" if self.pan_direction > 0 else "RIGHT"
-            print(f"SERVO: Expected pan movement direction: {expected_movement}")
         elif channel == self.tilt_channel:
-            print(f"SERVO: Direction multiplier for tilt is {self.tilt_direction}")
             # Apply direction and offset corrections
             calibrated_angle = (angle * self.tilt_direction) + self.tilt_offset
             calibrated_angle = max(self.tilt_min, min(self.tilt_max, calibrated_angle))
-            print(f"Tilt servo: requested={angle:.1f}°, calibrated={calibrated_angle:.1f}°")
-            # Log the expected physical movement direction
-            if angle > 0:
-                expected_movement = "UP" if self.tilt_direction > 0 else "DOWN"
-            else:
-                expected_movement = "DOWN" if self.tilt_direction > 0 else "UP"
-            print(f"SERVO: Expected tilt movement direction: {expected_movement}")
         else:
             calibrated_angle = angle
         
         command = f"SERVO,{channel},{calibrated_angle:.1f}"
-        print(f"Sending command: {command}")
+        # print(f"Sending command: {command}")
         success = self.send_command(command)
         
         if success:
@@ -180,9 +172,6 @@ class ArduinoServoController:
         tilt_compensation = pan_angle * (self.camera_offset_x / 1000.0)  # Rough approximation
         compensated_tilt = tilt_angle - tilt_compensation
         
-        print(f"Camera offset compensation: pan={pan_angle:.1f}°, original_tilt={tilt_angle:.1f}°, "
-              f"compensation={tilt_compensation:.2f}°, new_tilt={compensated_tilt:.1f}°")
-        
         return pan_angle, compensated_tilt
 
     def move_to_click(self, click_x, click_y, frame_width, frame_height):
@@ -195,9 +184,6 @@ class ArduinoServoController:
         pan_error = click_x - center_x
         tilt_error = click_y - center_y
         
-        print(f"Click: ({click_x}, {click_y}), Center: ({center_x}, {center_y})")
-        print(f"Pixel errors - Pan: {pan_error}, Tilt: {tilt_error}")
-        
         # Simple conversion: pixels to degrees
         pan_degrees = pan_error * 0.1  # 10 pixels = 1 degree
         tilt_degrees = -tilt_error * 0.1  # negative for Y axis (up/down flip)
@@ -208,8 +194,6 @@ class ArduinoServoController:
         # Limit to servo ranges
         pan_degrees = max(-45, min(45, pan_degrees))
         tilt_degrees = max(-30, min(30, tilt_degrees))
-        
-        print(f"Target angles - Pan: {pan_degrees:.1f}°, Tilt: {tilt_degrees:.1f}°")
         
         # Move servos directly to calculated angles
         success = self.move_servo(0, pan_degrees)  # Pan servo on channel 0
