@@ -640,8 +640,8 @@ def main():
                        help='Automatically run evaluation when quitting')
     parser.add_argument('--no-tracking', '-n', action='store_true',
                        help='Start with tracking disabled (can be toggled with "t" key)')
-    parser.add_argument('--record', '-r', action='store_true',
-                       help='Record video of tracking session')
+    parser.add_argument('--no-record', '-nr', action='store_true',
+                       help='Disable video recording (enabled by default)')
     parser.add_argument('--mode', '-m', choices=['surveillance', 'turret'], default='surveillance',
                        help='Tracking mode: surveillance (keeps person in scene) or turret (aims at center of bounding box)')
     parser.add_argument('--no-kalman', '-nk', action='store_true',
@@ -667,7 +667,7 @@ def main():
     config['tracking_enabled'] = not args.no_tracking
     
     # Add recording flag and tracking mode
-    config['record_video'] = args.record
+    config['record_video'] = not args.no_record  # Recording enabled by default
     config['tracking_mode'] = args.mode
     config['use_kalman'] = not args.no_kalman  # Kalman enabled by default
     

@@ -58,14 +58,14 @@ The main application uses YOLOv8 to detect people in the camera feed and control
 ### Basic Command
 
 ```bash
-# Run with default settings
+# Run with default settings (recording and Kalman filtering enabled)
 python main.py
 
 # Run without tracking (camera will show detections but won't move servos)
 python main.py --no-tracking
 
-# Run with video recording enabled
-python main.py --record
+# Run without video recording
+python main.py --no-record
 ```
 
 ### Command-line Arguments
@@ -78,34 +78,31 @@ python main.py --record
 | `--experiment`, `-e` | Name for this experiment run (for logging) |
 | `--eval` | Automatically run evaluation when quitting |
 | `--no-tracking`, `-n` | Start with tracking disabled (servos won't move) |
-| `--record`, `-r` | Record video of the tracking session |
+| `--no-record`, `-nr` | Disable video recording (enabled by default) |
 | `--mode`, `-m` | Tracking mode: 'surveillance' (keeps person in scene) or 'turret' (aims at center of bounding box) |
 | `--no-kalman`, `-nk` | Disable Kalman filtering (enabled by default) |
 
 ### Examples
 
 ```bash
-# Record video while tracking (default surveillance mode)
-python main.py --record
+# Run with default settings (recording enabled, surveillance mode)
+python main.py
 
-# Use turret mode for precision targeting
+# Use turret mode for precision targeting (recording still enabled)
 python main.py --mode turret
 
 # Use standard surveillance mode
 python main.py --mode surveillance
 
-# Kalman filtering is enabled by default for improved tracking
-python main.py
-
-# Record video with a specific experiment name (for organization)
-python main.py --record --experiment tracking_demo_1
+# Run with a specific experiment name (for organization)
+python main.py --experiment tracking_demo_1
 
 # Record without tracking (useful for creating test footage)
-python main.py --record --no-tracking
+python main.py --no-tracking
 
-# Record, track in turret mode, and run evaluation when finished
-# Run with all options (Kalman filtering is enabled by default)
-python main.py --record --mode turret --eval
+# Track in turret mode and run evaluation when finished
+# Run with all options (recording and Kalman filtering enabled by default)
+python main.py --mode turret --eval
 ```
 
 ### Tracking Modes
