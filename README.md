@@ -257,7 +257,7 @@ Key configuration parameters:
     "inverted_pan": true
   },
   "tracking": {
-    "model_path": "yolov8n.pt",
+    "model_path": "models/yolov8n.pt",
     "confidence_threshold": 0.5,
     "dead_zone": 20
   }
@@ -277,6 +277,21 @@ Key configuration parameters:
 - Run `python evals/servo_diagnostic.py` to test servo functionality
 
 ### Detection Issues
-- Ensure YOLO model file exists
-- Try a different model (e.g., `--model yolov8s.pt` for better accuracy)
+- Ensure YOLO model file exists in the models directory
+- Try a different model (e.g., `--model models/yolov8s.pt` for better accuracy)
 - Adjust confidence threshold in config file
+
+## Repository Structure
+
+The repository is organized as follows:
+
+- `assets/` - Images and videos for documentation
+- `config/` - Configuration files and calibration data
+- `data/` - Performance data and analysis results
+- `docs/` - Additional documentation and references
+- `evals/` - Evaluation and diagnostic tools
+- `logs/` - Experiment logs and tracking data
+- `models/` - Trained model files (YOLO weights)
+- `requirements/` - Various requirement files for different environments
+- `src/` - Source code for the tracking system
+- `tests/` - Test scripts and utilities

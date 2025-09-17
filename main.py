@@ -38,7 +38,7 @@ def load_config(config_path="config/config.json"):
             "inverted_pan": True # Our pan servo is inverted (default True)
         },
         "tracking": {
-            "model_path": "yolov8n.pt",
+            "model_path": "models/yolov8n.pt",
             "confidence_threshold": 0.5,
             "dead_zone": 50
         },
@@ -104,7 +104,7 @@ class PanTiltYOLOTracker:
         # YOLO tracker setup
         tracking_config = config.get('tracking', {})
         self.yolo_tracker = YOLOTracker(
-            model_path=tracking_config.get('model_path', 'yolov8n.pt'),
+            model_path=tracking_config.get('model_path', 'models/yolov8n.pt'),
             confidence_threshold=tracking_config.get('confidence_threshold', 0.5),
             tracking_mode=config.get('tracking_mode', 'surveillance'),
             use_kalman=config.get('use_kalman', False)

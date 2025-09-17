@@ -1,7 +1,8 @@
-.zed2_system_env/
 # Virtual environments
+.zed2_system_env/
 .zed2_complete_env/
 .pan_tilt_env/
+.claude/
 venv/
 env/
 *=*
@@ -12,9 +13,26 @@ logs/experiment_*/analysis/*.mp4
 logs/experiment_*/analysis/*.csv
 logs/experiment_*/videos/*.mp4
 
+# Python bytecode
 src/*.cpython-312.pyc
 src/__pycache__/*.cpython-312.pyc
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Video files
 *tracking_data*.mp4
 # Ignore MP4 files in all directories except assets/
 *.mp4
 !assets/*.mp4
+
+# Model files (optionally exclude large model files)
+# models/*.pt
+# !models/README.md
+
+# Data files
+data/performance_*.csv
+data/tracking_*.csv
+
+# Generated content
+reorganize_repo.sh

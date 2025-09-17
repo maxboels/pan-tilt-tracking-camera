@@ -29,15 +29,18 @@ pip install -r requirements.txt
 chmod +x evals/analyze_tracking_logs.py
 chmod +x evals/tracking_visualization.py
 
-# Download YOLO model if not present
-if [ ! -f "yolov8n.pt" ]; then
-    echo "Downloading YOLOv8 nano model..."
-    python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
-fi
-
-# Create directories
+# Create necessary directories
 mkdir -p captures
 mkdir -p logs
+mkdir -p data
+mkdir -p models
+mkdir -p tests
+
+# Download YOLO model if not present
+if [ ! -f "models/yolov8n.pt" ]; then
+    echo "Downloading YOLOv8 nano model..."
+    python -c "from ultralytics import YOLO; model = YOLO('yolov8n.pt'); model.save('models/yolov8n.pt')"
+fi
 
 echo ""
 echo "Setup complete!"

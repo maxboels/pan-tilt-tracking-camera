@@ -28,7 +28,7 @@
     "min_tracking_confidence": 0.5
   },
   "tracking": {
-    "model_path": "yolov8n.pt",
+    "model_path": "models/yolov8n.pt",
     "confidence_threshold": 0.5,
     "dead_zone": 30
   },

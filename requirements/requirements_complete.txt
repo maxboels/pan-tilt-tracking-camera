@@ -1,0 +1,37 @@
+# Complete ZED2 Tracking System Requirements
+
+# Core ZED and Computer Vision
+numpy>=1.13,<2.0
+opencv-python==4.8.1.78  # Specific version that works with ZED
+cython>=3.0.0
+Pillow>=8.0.0
+
+# YOLO Object Detection
+ultralytics>=8.0.0
+torch>=1.9.0
+torchvision>=0.10.0
+
+# Point Cloud Processing
+open3d>=0.15.0  # Optional but recommended for advanced 3D processing
+
+# Pan-Tilt Hardware Control (Jetson Nano only)
+adafruit-circuitpython-pca9685>=3.4.0  # For servo control
+adafruit-blinka>=8.0.0  # CircuitPython compatibility
+
+# Data handling and utilities
+matplotlib>=3.5.0
+scipy>=1.7.0
+scikit-learn>=1.0.0  # For clustering algorithms
+
+# Configuration and logging
+pyyaml>=5.4.0  # For config files
+argparse  # Built-in but listed for completeness
+
+# Development and debugging
+pytest>=6.0.0  # For testing
+black>=22.0.0  # Code formatting
+flake8>=4.0.0  # Linting
+
+# Note: ZED SDK Python API must be installed separately:
+# On laptop (x86_64): pip install wheels/pyzed-4.2-cp312-cp312-linux_x86_64.whl  
+# On Jetson (ARM64): cd /usr/local/zed && python3 get_python_api.py
