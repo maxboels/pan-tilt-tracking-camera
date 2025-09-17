@@ -15,4 +15,6 @@ logs/experiment_*/videos/*.mp4
 src/*.cpython-312.pyc
 src/__pycache__/*.cpython-312.pyc
 *tracking_data*.mp4
+# Ignore MP4 files in all directories except assets/
 *.mp4
+!assets/*.mp4

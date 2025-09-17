@@ -2,7 +2,7 @@
 
 A computer vision system for tracking people using a USB camera and controlling a pan-tilt servo mechanism with YOLOv8-based object detection.
 
-![Pan-Tilt Tracking Camera](captures/Pan-Tilt%20Tracking%20Camera_screenshot_12.09.2025.png)
+![Pan-Tilt Tracking Camera](assets/pan_tilt_camera_turret_setup.png)
 
 ## Features
 
@@ -11,6 +11,14 @@ A computer vision system for tracking people using a USB camera and controlling 
 - **Pan-Tilt Control**: Arduino-based servo control with inverted pan servo support
 - **USB Camera Support**: Works with standard UVC USB cameras
 - **Performance Logging**: Comprehensive logging system for evaluation and analysis
+
+## Demo Videos
+
+### Demo Videos (click to view)
+- **[📹 Pan-Tilt Camera Screen Recording](assets/pan_tilt_camera_screen_recording.mp4)** - General tracking demonstration
+- **[📹 Pan-Tilt Camera Turret Mode](assets/pan_tilt_camera_turret.mp4)** - Precision targeting mode demonstration
+
+*Note: Download the videos to view them, or view them directly on your local clone of the repository.*
 
 ## Table of Contents
 
